@@ -53,7 +53,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function DemoBanner() {
-  if (import.meta.env['VITE_AGENDA_MODE'] !== "demo") return <div className="border-b px-4 py-2 text-xs text-muted-foreground">Agenda interna · Datos persistidos en Supabase · Google Workspace pendiente de conectar</div>;
+  if (import.meta.env['VITE_AGENDA_MODE'] !== "demo") return <div className="border-b px-4 py-2 text-xs text-muted-foreground">Agenda interna · Datos persistidos en Supabase · Conexión de Google Workspace en Configuración</div>;
   return (
     <div className="demo-stripe border-b border-warning/50 px-4 py-2 text-xs text-warning-foreground lg:px-8">
       <span className="font-mono font-semibold tracking-widest">DEMO</span>

@@ -65,13 +65,14 @@ function ResumenPage() {
         const reviewed = rows.filter((r) => r.countsAsReviewed).length;
         return {
           advisor: a,
+          openPendings: pendings.filter(p=>p.status==="abierto"&&clientById.get(p.clientId)?.advisorId===a.id),
           total: rows.length,
           reviewed,
           overdue: rows.filter((r) => r.isOverdue).length,
           coverage: rows.length ? reviewed / rows.length : 0,
         };
       }),
-    [advisors, summary, clientById],
+    [advisors, summary, clientById, pendings],
   );
 
   const setMonth = (m: string) => navigate({ search: { mes: m } });
@@ -232,7 +233,7 @@ function ResumenPage() {
                 <TableHead className="text-right">Carteras</TableHead>
                 <TableHead className="text-right">Revisadas</TableHead>
                 <TableHead className="text-right">Atrasadas</TableHead>
-                <TableHead className="w-48">Cobertura</TableHead>
+                <TableHead>Pendientes del asesor</TableHead><TableHead className="w-48">Cobertura</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -245,6 +246,7 @@ function ResumenPage() {
                   <TableCell className="text-right font-mono tabular-nums">{row.total}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{row.reviewed}</TableCell>
                   <TableCell className="text-right font-mono tabular-nums">{row.overdue}</TableCell>
+                  <TableCell><details><summary>{row.openPendings.length} abiertos</summary>{row.openPendings.map(p=><p className="mt-2 text-xs" key={p.id}><ClientLink id={p.clientId} name={clientById.get(p.clientId)?.name} month={month}/> · {p.description} · vence {formatDate(p.dueDate)}</p>)}</details></TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Progress value={row.coverage * 100} className="h-1.5" />

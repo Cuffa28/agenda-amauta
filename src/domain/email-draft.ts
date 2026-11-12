@@ -46,7 +46,7 @@ export function draftFingerprint({ client, advisor, position, review }: DraftSou
         : null,
       month: review.month,
       decision: review.decision,
-      marketViewVersionId: review.marketViewSnapshot.versionId,
+      marketViewVersionId: review.marketViewSnapshot?.versionId || null,
     }),
   );
 }
@@ -118,7 +118,7 @@ export function generateEmailDraft({ client, advisor, position, review }: DraftS
   lines.push("");
 
   const v = review.marketViewSnapshot;
-  lines.push(`Visión de mercado aplicada (v${v.version} · ${v.title}): ${v.summary}`, "");
+  if (v) lines.push(`Visión de mercado aplicada (v${v.version} · ${v.title}): ${v.summary}`, "");
 
   if (d?.type === "proponer_cambio" && d.validacionAsesor !== "validada") {
     lines.push("¿Podés validar la propuesta antes de avanzar con el cliente?", "");

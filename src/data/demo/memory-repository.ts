@@ -236,7 +236,9 @@ export function createMemoryRepository(
     async createFollowUp(input) {
       const data = parseOrThrow(followUpInputSchema, input);
       const link = data.link;
-      if (link.kind === "pendiente") {
+      if (link.kind === "bloque") {
+        if (!link.clientIds.includes(data.clientId) || link.clientIds.some(id => !state.clients.some(c => c.id === id))) throw new RepositoryRuleError("Elegí carteras válidas para el bloque.");
+      } else if (link.kind === "pendiente") {
         const pending = state.pendings.find((p) => p.id === link.pendingId);
         if (!pending || pending.clientId !== data.clientId) {
           throw new RepositoryRuleError("El pendiente no pertenece a ese cliente");

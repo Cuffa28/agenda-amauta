@@ -57,7 +57,7 @@ describe('Adaptador de datos reales',()=>{
     await repo.createPending({clientId:review.clientId,reviewId:review.id,origin:'manual',description:'Confirmar restricción del cliente',dueDate:'2026-11-20'});
     d.tables['agenda_market_versions']!.push({id:'market-two',title:'Visión siguiente',body:'Otra visión no debe alterar la utilizada.',as_of:'2026-11-13',created_at:'2026-11-13T10:00:00Z'});
     const closed=await repo.closeReview(review.id);
-    expect(closed.marketViewSnapshot.body).toBe(review.marketViewSnapshot.body);
+    expect(closed.marketViewSnapshot?.body).toBe(review.marketViewSnapshot?.body);
     const state=portfolioMonthStatus({id:review.clientId,reviewDay:12},'2026-11',await repo.listReviews(),await repo.listPendings(),'2026-11-12');
     expect(state.countsAsReviewed).toBe(true);expect(state.status).toBe('revisada_con_pendiente');
     expect((await repo.listPendings())[0]?.dueDate).toBe('2026-11-20');
@@ -69,4 +69,17 @@ describe('Adaptador de datos reales',()=>{
     await repo.closeReview(r.id);await repo.closeReview(r.id);
     expect(await repo.listPendings()).toHaveLength(1);expect(d.tables['agenda_reviews']).toHaveLength(1);
   });
+  it('permite mantener con una nota aunque no haya visión de mercado publicada',async()=>{
+    const d=database();d.tables['agenda_market_versions']=[];const repo=createSupabaseRepository(()=>d.client);
+    const review=await repo.startReview({clientId:'0000-00',month:'2026-11'});
+    expect(review.marketViewSnapshot).toBeNull();await repo.saveDecision(review.id,{type:'mantener',nota:'Se mantiene según la revisión realizada'});
+    const closed=await repo.closeReview(review.id);expect(closed.marketViewSnapshot).toBeNull();expect(closed.status).toBe('cerrada');
+  });
+  it('guarda un bloque de carteras y no lo cuenta como pendiente de una revisión',async()=>{
+    const d=database(),repo=createSupabaseRepository(()=>d.client);
+    const input={clientId:'0000-00',title:'Revisar grupo de carteras',link:{kind:'bloque' as const,clientIds:['0000-00','0001-00']},date:'2026-11-16',time:'10:00',durationMinutes:60};
+    await repo.createFollowUp(input);expect(await repo.listFollowUps()).toHaveLength(1);expect(await repo.listPendings()).toHaveLength(0);
+    await expect(repo.createFollowUp({...input,link:{kind:'bloque',clientIds:['not-a-client']}})).rejects.toThrow();
+  });
+
 });

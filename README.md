@@ -24,3 +24,8 @@ El adaptador Nitro genera la salida para Vercel. Configurar VITE_SUPABASE_URL y 
 ## Acceso sin contraseña
 
 El ingreso principal usa el código enviado al correo existente del usuario (signInWithOtp + verifyOtp). El código no se registra ni se conserva luego de verificarlo. Las cuentas habilitadas se controlan en agenda_access mediante RLS. La plantilla de correo del proyecto debe incluir {{ .Token }}. Las cuentas nuevas se habilitan desde Supabase; el formulario no crea usuarios automáticamente.
+
+
+## Google Workspace y seguimiento
+
+Ver GOOGLE_WORKSPACE.md para autorizar los servicios en el proyecto corporativo. La ficha incluye PDF en Drive, importador de posiciones Balanz para revisar, plan de rotación por moneda, historial de posiciones y avances de propuesta. Gmail conserva borradores editables; Calendar prepara bloques o seguimientos y crea eventos solo con confirmación. Las pruebas de API reales requieren completar la configuración y autorizar Google.

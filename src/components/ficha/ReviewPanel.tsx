@@ -53,9 +53,9 @@ export function ReviewPanel({
         <p className="text-sm text-muted-foreground">
           Sin iniciar. Vence el <span className="font-mono">{formatDate(status.dueDate)}</span>. Al
           iniciar se congela la versión vigente de la visión de mercado
-          {latest && <> (v{latest.version} · {latest.title})</>}.
+          {latest ? <> (v{latest.version} · {latest.title})</> : <> cuando haya una publicada; esta revisión podrá continuar sin una visión asociada</>}.
         </p>
-        <Button className="mt-4" onClick={() => start.mutate()} disabled={start.isPending || !latest}>
+        <Button className="mt-4" onClick={() => start.mutate()} disabled={start.isPending}>
           <PlayCircle />
           Iniciar revisión
         </Button>
@@ -85,7 +85,8 @@ export function ReviewPanel({
   );
 }
 
-function SnapshotBox({ snapshot, latestVersion }: { snapshot: MarketViewSnapshot; latestVersion?: number | undefined }) {
+function SnapshotBox({ snapshot, latestVersion }: { snapshot: MarketViewSnapshot|null; latestVersion?: number | undefined }) {
+  if(!snapshot)return <p className="rounded border p-3 text-sm">Esta revisión no tiene una visión de mercado asociada. No se adjuntará una lectura de mercado inventada al borrador.</p>;
   return (
     <div className="rounded-md border border-turquoise/40 bg-accent/50 p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">

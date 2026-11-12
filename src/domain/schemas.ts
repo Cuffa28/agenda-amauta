@@ -42,6 +42,8 @@ export const clientSchema = z.object({
   sector: z.string().trim().min(1).max(80, "Sector: máximo 80 caracteres").optional(),
   advisorId: z.string().min(1, "Asigná un asesor"),
   reviewDay: z.number().int().min(0).max(31),
+  liquidityNote: z.string().optional(),
+  horizonMonths: z.number().nullable().optional(),
   isDemo: z.boolean(),
   updatedAt: isoDateTimeSchema.optional(),
 });
@@ -158,7 +160,7 @@ export const reviewSchema = z.object({
   positionId: z.string().nullable(),
   previousConclusion: z.string().nullable(),
   decision: decisionSchema.nullable(),
-  marketViewSnapshot: marketViewSnapshotSchema,
+  marketViewSnapshot: marketViewSnapshotSchema.nullable(),
   startedAt: isoDateTimeSchema,
   closedAt: isoDateTimeSchema.nullable(),
 });
@@ -194,10 +196,11 @@ export const emailDraftInputSchema = z
   })
   .strict();
 export type EmailDraftInput = z.infer<typeof emailDraftInputSchema>;
-export const emailDraftSchema = emailDraftInputSchema.extend({ updatedAt: isoDateTimeSchema });
+export const emailDraftSchema = emailDraftInputSchema.extend({ updatedAt: isoDateTimeSchema, gmailDraftId: z.string().optional(), googleAccount: z.string().optional() });
 export type EmailDraft = z.infer<typeof emailDraftSchema>;
 
 export const followUpLinkSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("bloque"), clientIds: z.array(clientIdSchema).min(1).max(107) }).strict(),
   z.object({ kind: z.literal("revision"), reviewId: z.string().min(1) }).strict(),
   z.object({ kind: z.literal("propuesta"), reviewId: z.string().min(1) }).strict(),
   z.object({ kind: z.literal("pendiente"), pendingId: z.string().min(1) }).strict(),
@@ -224,6 +227,9 @@ export const followUpInputSchema = z
 export type FollowUpInput = z.infer<typeof followUpInputSchema>;
 export const followUpSchema = followUpInputSchema.extend({
   id: z.string().min(1),
+  calendarEventId: z.string().optional(),
+  calendarUrl: z.string().optional(),
+  googleAccount: z.string().optional(),
   timezone: z.literal(BA_TZ),
   createdAt: isoDateTimeSchema,
 });

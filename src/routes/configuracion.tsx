@@ -1,14 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { PageHeader, SectionCard } from '@/components/PageHeader';
-
-export const Route = createFileRoute('/configuracion')({ component: Configuration });
-function Configuration() {
-  return <><PageHeader title="Configuración" description="Estado real de este entorno de desarrollo" />
-    <SectionCard title="Conexiones"><dl className="grid gap-4">{[
-      ['Datos','Adaptador Supabase; requiere inicio de sesión autorizado'],
-      ['Supabase','Tablas agenda_*; revisiones en curso y borradores persistidos, con políticas de acceso'],
-      ['Google Drive','No conectado'],['Gmail','No conectado; envío de mensajes no implementado'],
-      ['Google Calendar','No conectado; no se crean eventos'],['Publicación','Pendiente de publicación y prueba de acceso en el entorno final'],
-    ].map(([name,value])=><div key={name}><dt className="font-semibold">{name}</dt><dd className="text-muted-foreground">{value}</dd></div>)}</dl></SectionCard>
-  </>;
-}
+import { GoogleConnection, useGoogleWorkspace } from '@/integrations/google/GoogleConnection';
+export const Route=createFileRoute('/configuracion')({ssr:false,component:Configuration});
+function Configuration(){const google=useGoogleWorkspace();return <><PageHeader title="Configuración" description="Acceso y conexiones de Agenda Amauta"/><GoogleConnection showSetup/>
+<SectionCard title="Estado de los servicios"><dl className="mt-4 grid gap-3">{[
+['Agenda','Datos reales en Supabase; acceso con código al correo autorizado.'],
+['Google Drive',google.connected?'Conectado: selección y carga de PDF.':'Pendiente de conexión a la cuenta laboral. Los enlaces ya guardados se conservan.'],
+['Gmail',google.connected?'Conectado: guardar o actualizar borradores; vos revisás y enviás desde Gmail.':'Pendiente de conexión. Los borradores de Agenda se conservan.'],
+['Google Calendar',google.connected?'Conectado: vista previa, control de superposiciones y creación confirmada en tu calendario principal.':'Pendiente de conexión. Podés preparar bloques y seguimientos.'],
+['Publicación','Aplicación publicada en Vercel. El estado conectado se comprueba por sesión y no indica una prueba real hasta autorizar Google.']
+].map(([name,value])=><div key={name}><dt className="font-semibold">{name}</dt><dd className="text-sm text-muted-foreground">{value}</dd></div>)}</dl></SectionCard></>;}

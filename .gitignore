@@ -1,0 +1,1 @@
+node_modules/\n.output/\n.vercel/\n.wrangler/\n.env*\n!.env.example\n*.local\nESTADO.md\ndeployment-notes/\n

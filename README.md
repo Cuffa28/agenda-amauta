@@ -19,3 +19,8 @@ Los PDF y datos de clientes pertenecen a Drive y Supabase, no al repositorio. El
 ## Publicación
 
 El adaptador Nitro genera la salida para Vercel. Configurar VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en el proyecto, conservar VITE_GOOGLE_AUTH_ENABLED=false hasta habilitar el proveedor Google. Autorizar el dominio de la app en las redirecciones de Supabase Auth sin quitar otros dominios existentes.
+
+
+## Acceso sin contraseña
+
+El ingreso principal usa el código enviado al correo existente del usuario (signInWithOtp + verifyOtp). El código no se registra ni se conserva luego de verificarlo. Las cuentas habilitadas se controlan en agenda_access mediante RLS. La plantilla de correo del proyecto debe incluir {{ .Token }}. Las cuentas nuevas se habilitan desde Supabase; el formulario no crea usuarios automáticamente.

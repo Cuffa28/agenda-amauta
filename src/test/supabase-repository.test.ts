@@ -1,3 +1,4 @@
+import { generateEmailDraft } from '@/domain/email-draft';
 import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseRepository } from '@/data/supabase/repository';
@@ -134,6 +135,42 @@ describe('Adaptador de datos reales',()=>{
     await repo.createPending({clientId:r.clientId,reviewId:r.id,origin:'manual',description:'Información a validar con el asesor',dueDate:'2026-11-20'});
     await expect(repo.cancelEmptyReview(r.id)).rejects.toThrow('No está vacía');
     expect(await repo.listReviews(r.clientId)).toHaveLength(1);expect(await repo.listPendings(r.clientId)).toHaveLength(1);
+  });
+
+  it('conserva el análisis interno sin decisión y al cerrar, sin incluirlo en el correo', async () => {
+    const d = database(), repo = createSupabaseRepository(() => d.client);
+    const review = await repo.startReview({ clientId: '0000-00', month: '2026-11' });
+    await repo.saveReviewAnalysis(review.id, 'Hipótesis interna provisional: revisar concentración y liquidez.');
+    const reopened = createSupabaseRepository(() => d.client);
+    const saved = (await reopened.listReviews(review.clientId))[0]!;
+    expect(saved.analysis).toContain('Hipótesis interna');
+    expect(saved.decision).toBeNull();
+    await expect(reopened.cancelEmptyReview(review.id)).rejects.toThrow('análisis guardado');
+    await reopened.saveDecision(review.id, { type: 'mantener', nota: 'Conservar la estrategia acordada por el momento' });
+    const closed = await reopened.closeReview(review.id);
+    expect(closed.analysis).toBe(saved.analysis);
+    await expect(reopened.saveReviewAnalysis(review.id, 'No debe sobreescribir el cierre')).rejects.toThrow('cerrada');
+    const draft = generateEmailDraft({ client: (await reopened.listClients())[0]!, advisor: { id: 'advisor', name: 'Asesor', email: 'asesor@example.com' }, position: null, review: closed });
+    expect(draft.body).not.toContain('Hipótesis interna');
+    expect(draft.body).toContain('Conservar la estrategia');
+  });
+  it('quita solo el PDF de la posición elegida y conserva partidas, revisiones y otras cargas', async () => {
+    const d = database(), repo = createSupabaseRepository(() => d.client);
+    const position = await repo.savePosition({ id: 'imported', clientId: '0000-00', alyc: 'Balanz', cutoffDate: '2026-11-13', drivePdf: { fileId: 'pdfOriginal12345', fileName: 'Posicion.pdf' }, items: [{ id: 'item1', instrument: 'Bono de prueba', currency: 'ARS', quantity: 10, price: 20, marketValue: 200 }], declaredTotals: [{ currency: 'ARS', amount: 200 }], sourceNote: 'Conciliación a revisar' });
+    const other = await repo.savePosition({ ...position, id: 'another', clientId: '0001-00' });
+    const review = await repo.startReview({ clientId: position.clientId, month: '2026-11' });
+    await repo.saveDecision(review.id, { type: 'mantener', nota: 'Conservar hasta la próxima revisión' });
+    await repo.closeReview(review.id);
+    await expect(repo.removePositionPdf(other.id, position.clientId)).rejects.toThrow();
+    const removed = await repo.removePositionPdf(position.id, position.clientId);
+    expect(removed.drivePdf).toBeNull();
+    expect(removed.items).toEqual(position.items);
+    expect(removed.sourceNote).toBe(position.sourceNote);
+    expect((await repo.listPositions('0001-00'))[0]?.drivePdf).toEqual(other.drivePdf);
+    expect((await repo.listReviews(position.clientId))[0]?.positionId).toBe(position.id);
+    expect(d.tables['agenda_positions']).toHaveLength(2);
+    const again = await repo.removePositionPdf(position.id, position.clientId);
+    expect(again.drivePdf).toBeNull();
   });
 
 });

@@ -1,4 +1,4 @@
-import { FileLock2 } from "lucide-react";
+import { PdfAttachment } from "./PdfAttachment";
 
 import { DisconnectedAction } from "@/components/DisconnectedAction";
 import { SectionCard } from "@/components/PageHeader";
@@ -25,18 +25,7 @@ export function PositionCard({ position }: { position: Position | null }) {
       title="Posición"
       description={<>{position.alyc} · corte al <span className="font-mono">{formatDate(position.cutoffDate)}</span></>}
     >
-      <div className="mb-5 flex flex-col gap-3 rounded-md border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <FileLock2 className="h-5 w-5 shrink-0 text-accent-foreground" />
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{position.drivePdf?.fileName ?? "PDF pendiente de vincular"}</div>
-            <div className="truncate font-mono text-xs text-muted-foreground">
-              PDF privado en Drive · ID {position.drivePdf?.fileId ?? "—"}
-            </div>
-          </div>
-        </div>
-        {position.drivePdf && <a className="text-sm underline" target="_blank" rel="noopener noreferrer" href={`https://drive.google.com/file/d/${position.drivePdf.fileId}/view`}>Abrir PDF en Drive</a>}
-      </div>
+      <div className="mb-5"><PdfAttachment position={position}/></div>
 
       {position.sourceNote && <p className="mb-5 rounded border border-warning p-3 text-sm">{position.sourceNote}</p>}
       <div className="mb-5 grid gap-3 sm:grid-cols-2">

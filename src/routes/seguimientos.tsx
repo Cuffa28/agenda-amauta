@@ -39,7 +39,7 @@ function FollowUps() {
     </form></SectionCard>
     <div className="mt-7"><h2 className="mb-4 text-lg font-semibold">En tu agenda <span className="ml-2 text-sm font-normal text-muted-foreground">{items.length} preparados</span></h2>{items.length === 0 && <div className="surface-card empty-state"><span className="empty-state-icon"><CalendarDays size={18}/></span><p>Tu próximo bloque o seguimiento empieza acá.</p></div>}<div className="grid gap-4">{items.map(item => <SectionCard key={item.id} title={item.title}>
       <p>{item.date} · {item.time} · {item.durationMinutes} min · {item.link.kind === 'bloque' ? item.link.clientIds.map(name).join(', ') : name(item.clientId)}</p>
-      <CalendarAction item={item} description={'Agenda Amauta\n'+(item.link.kind === 'bloque' ? item.link.clientIds.map(id => `${id} · ${name(id)}`).join('\n') : `${item.clientId} · ${name(item.clientId)}`)+'\n'+window.location.origin+'/clientes/'+encodeURIComponent(item.clientId)}/>
+      <CalendarAction item={item} description={'Agenda Amauta\n'+(item.link.kind === 'bloque' ? item.link.clientIds.map(id => `${id} · ${name(id)}`).join('\n') : `${item.clientId} · ${name(item.clientId)}`)+'\n'+(item.notes || '')+'\n'+window.location.origin+'/clientes/'+encodeURIComponent(item.clientId)}/>
     </SectionCard>)}</div></div>
   </>;
 }

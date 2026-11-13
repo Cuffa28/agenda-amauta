@@ -33,6 +33,7 @@ export function CalendarAction({ item, description }: { item: FollowUp; descript
         <Button type="button" disabled={busy} onClick={() => void create()}>Confirmar y crear evento{conflicts.length ? ' con superposición' : ''}</Button>
       </div>}
     </>}
+    {!google.connected && !url && <p className="text-xs text-muted-foreground">Conectá Google Workspace para revisar horarios y crear este evento en tu calendario.</p>}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </div>;
 }

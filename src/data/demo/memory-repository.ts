@@ -3,6 +3,7 @@ import {
   clientUpdateSchema,
   positionSchema,
   decisionSchema,
+  reviewSchema,
   emailDraftInputSchema,
   followUpInputSchema,
   marketViewVersionInputSchema,
@@ -85,6 +86,19 @@ export function createMemoryRepository(
 
     async savePosition(input) { const position = parseOrThrow(positionSchema, input); state.positions = [position, ...state.positions.filter(p => p.clientId !== position.clientId)]; return clone(position); },
 
+    async removePositionPdf(positionId, clientId) {
+      const position = state.positions.find(p => p.id === positionId && p.clientId === clientId);
+      if (!position) throw new RepositoryNotFoundError('Posición', positionId);
+      position.drivePdf = null;
+      return clone(position);
+    },
+    async saveReviewAnalysis(reviewId, analysis) {
+      const review = findReview(reviewId);
+      if (review.status === 'cerrada') throw new RepositoryRuleError('La revisión ya está cerrada');
+      const parsed = parseOrThrow(reviewSchema, { ...review, analysis });
+      review.analysis = parsed.analysis;
+      return clone(review);
+    },
     async listPositions(clientId) {
       return clone(state.positions.filter(row => !clientId || row.clientId === clientId));
     },
@@ -133,6 +147,7 @@ export function createMemoryRepository(
 
     async cancelEmptyReview(reviewId) {
       const review = findReview(reviewId);
+      if (review.analysis?.trim()) throw new RepositoryRuleError('Esta revisión tiene análisis guardado');
       if (review.decision || review.status === 'cerrada') throw new RepositoryRuleError('Esta revisión ya tiene una decisión guardada');
       if (state.pendings.some(p => p.reviewId === reviewId) || state.drafts.some(d => d.reviewId === reviewId) || state.followUps.some(f => 'reviewId' in f.link && f.link.reviewId === reviewId)) throw new RepositoryRuleError('Esta revisión tiene datos guardados. No está vacía.');
       state.reviews = state.reviews.filter(r => r.id !== reviewId);

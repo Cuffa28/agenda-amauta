@@ -159,6 +159,7 @@ export const reviewSchema = z.object({
   status: z.enum(REVIEW_STATUSES),
   positionId: z.string().nullable(),
   previousConclusion: z.string().nullable(),
+  analysis: z.string().trim().max(8000).optional(),
   decision: decisionSchema.nullable(),
   marketViewSnapshot: marketViewSnapshotSchema.nullable(),
   startedAt: isoDateTimeSchema,

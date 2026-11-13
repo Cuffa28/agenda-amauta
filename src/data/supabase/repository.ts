@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describeDecision } from '@/domain/decision';
 import { stableUuid } from '@/domain/ids';
 import { BA_TZ } from '@/domain/dates';
-import { clientUpdateSchema, decisionSchema, emailDraftInputSchema, followUpInputSchema, marketViewVersionInputSchema, monthSchema, pendingInputSchema, positionSchema, type Review, type PendingItem, type EmailDraft, type FollowUp, type Position } from '@/domain/schemas';
+import { clientUpdateSchema, decisionSchema, emailDraftInputSchema, followUpInputSchema, marketViewVersionInputSchema, monthSchema, pendingInputSchema, positionSchema, reviewSchema, type Review, type PendingItem, type EmailDraft, type FollowUp, type Position } from '@/domain/schemas';
 import { parseOrThrow, RepositoryRuleError, type AgendaRepository } from '../repository';
 import { getSupabase, requireAgendaSession } from './client';
 import { advisorId, decode, mapAdvisors, mapClient, mapMarket, mapPosition, mapReview, type DbRow } from './mappers';
@@ -42,6 +42,22 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     },
     async listPositions(clientId) { const all = (await rows('agenda_positions', clientId)).sort((a,b) => b['as_of'].localeCompare(a['as_of']) || b['created_at'].localeCompare(a['created_at'])); return [...new Map(all.reverse().map(r => [r['client_id'], mapPosition(r)])).values()]; },
     async savePosition(input) { const p = parseOrThrow(positionSchema, input); const r = await insert('agenda_positions', { client_id: p.clientId, broker: p.alyc, as_of: p.cutoffDate, drive_url: p.drivePdf ? `https://drive.google.com/file/d/${p.drivePdf.fileId}/view` : null, summary: JSON.stringify({schema:'agenda-position-v1',fileName:p.drivePdf?.fileName||'',sourceNote:p.sourceNote||''}), details: p.items, totals: p.declaredTotals, status: 'manual' }); return mapPosition(r); },
+    async removePositionPdf(positionId, clientId) {
+      const { data: old, error } = await db().from('agenda_positions').select('*').eq('id', positionId).eq('client_id', clientId).single();
+      if (error) throw error;
+      if (!old) throw new RepositoryRuleError('Posición no encontrada en esta cartera.');
+      const metadata = decode(old['summary']);
+      return mapPosition(await update('agenda_positions', positionId, {
+        drive_url: null,
+        summary: JSON.stringify({ ...metadata, schema: 'agenda-position-v1', fileName: '', pdfRemovedAt: new Date().toISOString() }),
+      }, old['updated_at']));
+    },
+    async saveReviewAnalysis(id, analysis) {
+      const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;
+      if ((await rows('agenda_reviews', review.clientId)).some(r => r['id'] === id)) throw new RepositoryRuleError('La revisión ya está cerrada.');
+      const parsed = parseOrThrow(reviewSchema, { ...review, analysis });
+      return saveWorkspace(w, parsed);
+    },
     listReviews: allReviews,
     async startReview({ clientId, month }) {
       parseOrThrow(monthSchema, month); await findClient(clientId);
@@ -64,6 +80,7 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     async cancelEmptyReview(id) {
       const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;
       const [completed, tasks, drafts] = await Promise.all([rows('agenda_reviews', review.clientId), rows('agenda_tasks', review.clientId), rows('agenda_drafts', review.clientId, 'email_draft')]);
+      if (review.analysis?.trim()) throw new RepositoryRuleError('Esta revisión tiene análisis guardado. Conservá el cierre habitual.');
       if (review.decision || completed.some(r => r['id'] === id)) throw new RepositoryRuleError('Esta revisión ya tiene una decisión guardada. Conservá el cierre habitual.');
       if (tasks.some(r => r['review_id'] === id || decode(r['notes'])['reviewId'] === id || decode(r['notes'])['input']?.link?.reviewId === id) || drafts.some(r => r['source_snapshot']?.input?.reviewId === id)) {
         throw new RepositoryRuleError('Esta revisión tiene pendientes, seguimientos o borradores guardados. No está vacía.');
@@ -90,7 +107,7 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       // Se crea el pendiente antes del cierre; un reintento no lo duplica.
       if (d['type'] === 'falta_informacion' && !(await pendings()).some(p => p.reviewId === id && p.origin === 'falta_informacion')) await createPending({ clientId: r['clientId'], reviewId: id, origin: 'falta_informacion', description: d['informacionFaltante'], dueDate: d['fechaLimite'] });
       const decision = d['type'] === 'mantener' ? 'maintain' : d['type'] === 'proponer_cambio' ? 'propose' : 'missing_info';
-      await insert('agenda_reviews', { id, client_id: r['clientId'], period: r['month'] + '-01', position_id: r['positionId'], decision, note: d['type'] === 'mantener' ? d['nota'] : d['type'] === 'falta_informacion' ? d['informacionFaltante'] : '', proposed_change: d['type'] === 'proponer_cambio' ? d['propuesta'] : null, horizon_liquidity_reason: d['type'] === 'proponer_cambio' ? `${d['fundamentoHorizonte']}\n${d['fundamentoLiquidez']}` : null, advisor_validation: d['type'] === 'proponer_cambio' ? d['validacionAsesor'] : null, reconsider_if: d['type'] === 'proponer_cambio' ? d['datoReconsiderar'] : null, market_version_id: r['marketViewSnapshot']?.versionId || null, conclusion: JSON.stringify({ schema: 'agenda-review-v1', decision: d, previousConclusion: r['previousConclusion'], startedAt: r['startedAt'] }) });
+      await insert('agenda_reviews', { id, client_id: r['clientId'], period: r['month'] + '-01', position_id: r['positionId'], decision, note: d['type'] === 'mantener' ? d['nota'] : d['type'] === 'falta_informacion' ? d['informacionFaltante'] : '', proposed_change: d['type'] === 'proponer_cambio' ? d['propuesta'] : null, horizon_liquidity_reason: d['type'] === 'proponer_cambio' ? `${d['fundamentoHorizonte']}\n${d['fundamentoLiquidez']}` : null, advisor_validation: d['type'] === 'proponer_cambio' ? d['validacionAsesor'] : null, reconsider_if: d['type'] === 'proponer_cambio' ? d['datoReconsiderar'] : null, market_version_id: r['marketViewSnapshot']?.versionId || null, conclusion: JSON.stringify({ schema: 'agenda-review-v1', decision: d, analysis: r['analysis'] || '', previousConclusion: r['previousConclusion'], startedAt: r['startedAt'] }) });
       return findReview(id);
     },
     listPendings: pendings, createPending,

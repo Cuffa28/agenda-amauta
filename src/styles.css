@@ -297,7 +297,7 @@ summary:hover { color: #353431; }
 .client-overview dl { margin-top: 24px; gap: 22px; }
 .client-overview dt { font-size: 9px; letter-spacing: 1px; color: #878683; }
 .client-overview dd { font-size: 12px; }
-.workflow-nav { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+.workflow-nav { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 9px; }
 .workflow-nav a { display: flex; align-items: center; gap: 10px; border: 1px solid #dfdedb; border-radius: 11px; background: #ffffffa6; padding: 13px 15px; color: #676663; font-size: 12px; font-weight: 500; }
 .workflow-nav a:hover, .workflow-nav a:focus-visible { color: #373633; background: #eae9e6; border-color: #a5a4a1; }
 .step-index { font-family: var(--font-mono); font-size: 10px; color: #8f8e8b; }
@@ -355,3 +355,5 @@ summary:hover { color: #353431; }
 .market-intro, .event-preview { background: #fbfaf3; border-color: #e9e3c6; color: #655a33; }
 .market-intro strong { color: #3f3a28; }
 @media (max-width: 600px) { .login-story .amauta-brand { width: 205px; } }
+
+@media (max-width: 600px) { .workflow-nav { grid-template-columns: repeat(2,minmax(0,1fr)); } .workflow-nav a:last-child { grid-column: 1 / -1; } }

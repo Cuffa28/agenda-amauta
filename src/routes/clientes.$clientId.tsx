@@ -1,3 +1,4 @@
+import { PersonalReviewSchedule } from '@/components/ficha/PersonalReviewSchedule';
 import { useState } from 'react';
 import { useQuery, useSuspenseQueries } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
@@ -41,12 +42,14 @@ function ClientPage() {
       <a  href="#posicion"><span className="step-index">02</span><span>Posición y PDF<small>La foto de la cartera</small></span></a>
       <a  href="#borrador"><span className="step-index">03</span><span>Borrador al asesor<small>Preparar la conversación</small></span></a>
       <a  href="#pendientes"><span className="step-index">04</span><span>Pendientes<small>El próximo paso</small></span></a>
+      <a href="#mi-agenda"><span className="step-index">05</span><span>Mi agenda<small>Reservar mi revisión</small></span></a>
     </nav>
     {client.liquidityNote && <SectionCard title="Mandato del cliente"><p>{client.liquidityNote}</p></SectionCard>}
     <section id="revision" className="scroll-mt-4">
       {!position && <p className="mb-3 rounded-xl border bg-white/60 p-4 text-xs text-muted-foreground">Todavía no hay posición cargada. Podés iniciar para pedir información o <a className="underline" href="#posicion">cargar el PDF</a> antes de documentar tu decisión.</p>}
       <ReviewPanel clientId={clientId} month={month} status={status} marketView={marketView} position={position}/>
     </section>
+    <section id="mi-agenda" className="scroll-mt-4"><PersonalReviewSchedule key={clientId} client={client}/></section>
     {previousConclusion && <SectionCard title="Conclusión anterior"><p>{previousConclusion}</p></SectionCard>}
     <section id="posicion" className="grid scroll-mt-4 gap-4"><PositionCard position={position}/><PositionEditor key={clientId} clientId={clientId}/></section>
     {historical.error && <p role="alert">No se pudo recuperar la posición utilizada en esta revisión. El borrador no se habilita hasta recuperarla.</p>}

@@ -39,11 +39,13 @@ export interface AgendaRepository {
   /** Última posición conocida de cada cliente. */
   listPositions(clientId?: string): Promise<Position[]>;
   savePosition(input: Position): Promise<Position>;
+  removePositionPdf(positionId: string, clientId: string): Promise<Position>;
   listReviews(clientId?: string): Promise<Review[]>;
   /** Crea la revisión del mes y congela la versión vigente de la visión de mercado. */
   startReview(input: { clientId: string; month: string }): Promise<Review>;
   setReviewPosition(reviewId: string, positionId: string): Promise<Review>;
   saveDecision(reviewId: string, decision: Decision): Promise<Review>;
+  saveReviewAnalysis(reviewId: string, analysis: string): Promise<Review>;
   closeReview(reviewId: string): Promise<Review>;
   cancelEmptyReview(reviewId: string): Promise<Review>;
   listPendings(clientId?: string): Promise<PendingItem[]>;

@@ -43,6 +43,7 @@ export function ReviewPanel({
   marketView: MarketView;
   position?: Position | null;
 }) {
+  const [analysisDirty, setAnalysisDirty] = useState(false);
   const review = status.review;
   const queryClient = useQueryClient();
   const latest = marketView.versions[0];
@@ -85,7 +86,13 @@ export function ReviewPanel({
       }
       actions={<PortfolioStatusBadge status={status.status} overdue={status.isOverdue} />}
     >
-      <SnapshotBox snapshot={review.marketViewSnapshot} latestVersion={latest?.version} />
+      <div className="mb-5 rounded-xl border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Tu criterio, paso a paso</p>
+        <p className="mt-1 text-muted-foreground">1. Escribí tu lectura interna. 2. Elegí mantener, proponer cambios o pedir información. 3. Guardá la decisión y prepará el borrador al asesor.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Cerrar la revisión registra tu trabajo del mes. La validación del asesor y la ejecución se siguen por separado.</p>
+      </div>
+      <AnalysisNotes key={review.id} review={review} onDirtyChange={setAnalysisDirty}/>
+      <details className="mt-4 text-sm"><summary className="cursor-pointer text-muted-foreground">Contexto: visión general de mercado utilizada</summary><div className="mt-3"><SnapshotBox snapshot={review.marketViewSnapshot} latestVersion={latest?.version} /></div></details>
       {review.status !== 'cerrada' && position && position.id !== review.positionId && <div className="mt-4 rounded border p-3 text-sm">
         <p>Hay una posición al {formatDate(position.cutoffDate)} disponible. Confirmá si querés usarla en esta revisión y en su borrador.</p>
         <Button className="mt-2" variant="outline" disabled={attachPosition.isPending} onClick={() => attachPosition.mutate(position.id)}>{attachPosition.isPending ? 'Vinculando…' : 'Usar esta posición en la revisión'}</Button>
@@ -94,11 +101,29 @@ export function ReviewPanel({
         {review.status === "cerrada" && review.decision ? (
           <DecisionSummary decision={review.decision} />
         ) : (
-          <DecisionForm key={review.id} review={review} />
+          <DecisionForm key={review.id} review={review} analysisDirty={analysisDirty} />
         )}
       </div>
     </SectionCard>
   );
+}
+
+function AnalysisNotes({ review, onDirtyChange }: { review: Review; onDirtyChange: (dirty: boolean) => void }) {
+  const queryClient = useQueryClient();
+  const [analysis, setAnalysis] = useState(review.analysis || '');
+  const save = useRepoMutation((repo, value: string) => repo.saveReviewAnalysis(review.id, value), {
+    success: 'Análisis interno guardado', invalidate: [], onSuccess: saved => { cacheSavedReview(queryClient, saved); onDirtyChange(false); },
+  });
+  const dirty = analysis.trim() !== (review.analysis || '').trim();
+  if (review.status === 'cerrada') return review.analysis ? <div className="rounded-xl border p-4"><h3 className="text-sm font-semibold">Mi análisis de esta cuenta · interno</h3><p className="mt-2 whitespace-pre-wrap text-sm">{review.analysis}</p></div> : null;
+  return <div className="space-y-3 rounded-xl border p-4">
+    <Field label="1. Mi análisis de esta cuenta" htmlFor={'analysis-'+review.id} hint="Notas internas de trabajo. No se incluyen automáticamente en el correo al asesor. Podés guardarlas sin haber definido una recomendación.">
+      <Textarea id={'analysis-'+review.id} rows={5} maxLength={8000} disabled={save.isPending} value={analysis} onChange={e => { setAnalysis(e.target.value); onDirtyChange(e.target.value.trim() !== (review.analysis || '').trim()); }} placeholder="¿Qué veo en la cartera? ¿Qué cambió? ¿Qué me preocupa? Separá hechos, tu interpretación y datos a confirmar."/>
+    </Field>
+    <div className="flex flex-wrap items-center gap-3"><Button type="button" variant="outline" disabled={save.isPending || !dirty} onClick={() => save.mutate(analysis)}>{save.isPending ? 'Guardando análisis…' : 'Guardar mi análisis'}</Button><span role="status" className="text-xs text-muted-foreground">{dirty ? 'Tenés análisis sin guardar.' : review.analysis ? 'Análisis guardado.' : 'Todavía no escribiste tu análisis.'}</span></div>
+    {dirty && <p className="text-xs text-muted-foreground">Guardá este análisis antes de cerrar la revisión o salir de la ficha.</p>}
+    {save.error && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
+  </div>;
 }
 
 function SnapshotBox({ snapshot, latestVersion }: { snapshot: MarketViewSnapshot|null; latestVersion?: number | undefined }) {
@@ -205,7 +230,7 @@ function toDecision(s: FormState): unknown {
   }
 }
 
-function DecisionForm({ review }: { review: Review }) {
+function DecisionForm({ review, analysisDirty }: { review: Review; analysisDirty: boolean }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<FormState>(() => initialState(review.decision));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -248,7 +273,7 @@ function DecisionForm({ review }: { review: Review }) {
 
   return (
     <div className="grid gap-5">
-      <Field label="Decisión" error={errors["type"]}>
+      <Field label="2. Qué recomiendo hacer" error={errors["type"]}>
         <RadioGroup
           value={state.type}
           onValueChange={(v) => set("type")(v as DecisionType)}
@@ -268,25 +293,25 @@ function DecisionForm({ review }: { review: Review }) {
       </Field>
 
       {state.type === "mantener" && (
-        <Field label="Nota breve" htmlFor="nota" error={errors["nota"]} hint={`${state.nota.length}/280`}>
-          <Textarea id="nota" rows={2} maxLength={280} value={state.nota} onChange={(e) => set("nota")(e.target.value)} />
+        <Field label="Por qué mantendría esta cartera" htmlFor="nota" error={errors["nota"]} hint={`${state.nota.length}/280`}>
+          <Textarea id="nota" placeholder="Qué sigue funcionando y por qué tiene sentido conservar la estrategia." rows={2} maxLength={280} value={state.nota} onChange={(e) => set("nota")(e.target.value)} />
         </Field>
       )}
 
       {state.type === "proponer_cambio" && (
         <>
-          <Field label="Propuesta de cambio" htmlFor="prop" error={errors["propuesta"]}>
-            <Textarea id="prop" rows={3} value={state.propuesta} onChange={(e) => set("propuesta")(e.target.value)} />
+          <Field label="Qué cambiaría y por qué" htmlFor="prop" error={errors["propuesta"]} hint="Esta recomendación sí se usa en el borrador al asesor. Detallá qué vender, mantener o sumar; importes o porcentajes y el fundamento.">
+            <Textarea id="prop" placeholder="Ejemplo de estructura: reducir [activo / monto], sumar [activo / monto] y mantener [saldo]. Lo propongo porque [tesis y evidencia]." rows={5} value={state.propuesta} onChange={(e) => set("propuesta")(e.target.value)} />
           </Field>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Fundamento: horizonte" htmlFor="fh" error={errors["fundamentoHorizonte"]}>
-              <Textarea id="fh" rows={2} value={state.fundamentoHorizonte} onChange={(e) => set("fundamentoHorizonte")(e.target.value)} />
+            <Field label="Para qué plazo tiene sentido" htmlFor="fh" error={errors["fundamentoHorizonte"]}>
+              <Textarea id="fh" placeholder="Horizonte del cliente y plazo necesario para la estrategia." rows={2} value={state.fundamentoHorizonte} onChange={(e) => set("fundamentoHorizonte")(e.target.value)} />
             </Field>
-            <Field label="Fundamento: liquidez" htmlFor="fl" error={errors["fundamentoLiquidez"]}>
-              <Textarea id="fl" rows={2} value={state.fundamentoLiquidez} onChange={(e) => set("fundamentoLiquidez")(e.target.value)} />
+            <Field label="Qué liquidez necesitamos conservar" htmlFor="fl" error={errors["fundamentoLiquidez"]}>
+              <Textarea id="fl" placeholder="Retiros esperados, saldo disponible y plazos de rescate." rows={2} value={state.fundamentoLiquidez} onChange={(e) => set("fundamentoLiquidez")(e.target.value)} />
             </Field>
           </div>
-          <Field label="Qué debe validar el asesor" htmlFor="que-validar" error={errors["queValidar"]}><Textarea id="que-validar" value={state.queValidar} onChange={e => set("queValidar")(e.target.value)} /></Field>
+          <Field label="3. Qué necesito que valide el asesor" htmlFor="que-validar" error={errors["queValidar"]}><Textarea id="que-validar" placeholder="Confirmar necesidades del cliente, restricciones y aceptación de la propuesta." value={state.queValidar} onChange={e => set("queValidar")(e.target.value)} /></Field>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Validación del asesor" error={errors["validacionAsesor"]}>
               <Select value={state.validacionAsesor} onValueChange={(v) => set("validacionAsesor")(v as AdvisorValidation)}>
@@ -297,7 +322,7 @@ function DecisionForm({ review }: { review: Review }) {
               </Select>
             </Field>
             <Field label="Dato que haría reconsiderar" htmlFor="dr" error={errors["datoReconsiderar"]}>
-              <Input id="dr" value={state.datoReconsiderar} onChange={(e) => set("datoReconsiderar")(e.target.value)} />
+              <Input id="dr" placeholder="Qué dato o escenario invalidaría la propuesta." value={state.datoReconsiderar} onChange={(e) => set("datoReconsiderar")(e.target.value)} />
             </Field>
           </div>
         </>
@@ -314,16 +339,19 @@ function DecisionForm({ review }: { review: Review }) {
         </div>
       )}
 
+      <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">Guardar decisión conserva la recomendación y deja la revisión abierta. Cerrar revisión también la guarda y cuenta la cartera como revisada; no significa que el asesor la haya aprobado ni que se haya ejecutado. Después, abrí Borrador al asesor para actualizar y revisar el mensaje.</p>
       <div className="flex flex-wrap gap-2 border-t pt-4">
         <Button variant="outline" disabled={busy} onClick={() => { const d = validate(); if (d) save.mutate(d); }}>
           {save.isPending ? 'Guardando…' : 'Guardar decisión'}
         </Button>
-        <Button disabled={busy} onClick={() => { if (!state.type && !review.decision) { cancelEmpty(); return; } const d = validate(); if (d) close.mutate(d); }}>
+        <Button disabled={busy || analysisDirty} onClick={() => { if (!state.type && !review.decision && !review.analysis?.trim()) { cancelEmpty(); return; } const d = validate(); if (d) close.mutate(d); }}>
           {cancel.isPending ? 'Cerrando prueba…' : close.isPending ? 'Cerrando…' : 'Cerrar revisión'}
         </Button>
-        {!review.decision && state.type && <Button variant="ghost" disabled={busy} onClick={cancelEmpty}>Cerrar sin guardar</Button>}
+        {!review.decision && !review.analysis?.trim() && state.type && <Button variant="ghost" disabled={busy || analysisDirty} onClick={cancelEmpty}>Cerrar sin guardar</Button>}
       </div>
-      {!review.decision && !state.type && <p className="text-xs text-muted-foreground">Si la abriste para probar, Cerrar revisión la deja sin iniciar y no suma a la cobertura mensual.</p>}
+      {analysisDirty && <p className="text-xs text-muted-foreground">Guardá tu análisis interno antes de cerrar esta revisión.</p>}
+      {!review.decision && !review.analysis?.trim() && !state.type && <p className="text-xs text-muted-foreground">Si la abriste para probar, Cerrar revisión la deja sin iniciar y no suma a la cobertura mensual.</p>}
+      {(save.error || close.error) && <p role="alert" className="text-sm text-destructive">{(save.error || close.error)?.message}</p>}
       {cancel.error && <p role="alert" className="text-sm text-destructive">{cancel.error.message}</p>}
     </div>
   );

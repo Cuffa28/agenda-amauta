@@ -17,7 +17,7 @@ export function GoogleConnection({ showSetup = false }: { showSetup?: boolean })
   const google = useGoogleWorkspace();
   const [config, setConfig] = useState(googleConfig), [error, setError] = useState('');
   useEffect(()=>{if(config.clientId)void loadScript('https://accounts.google.com/gsi/client').catch(()=>{});},[config.clientId]);
-  return <div className="space-y-3 rounded-md border p-4">
+  return <div className="connection-card mb-5 space-y-3 p-5">
     <p className="font-medium">Google Workspace · {google.connected ? google.email : 'Sin conexión activa'}</p>
     <p className="text-sm text-muted-foreground">Drive: archivos que selecciones. Gmail: borradores. Calendar: eventos en tu calendario laboral, sin invitados. La conexión se renueva cuando Google la solicite.</p>
     <div className="flex flex-wrap gap-2"><Button type="button" disabled={google.busy || !config.clientId} onClick={() => { setError(''); void connectGoogle().catch(e => setError(e.message)); }}>{google.busy ? 'Conectando…' : google.connected ? 'Cambiar cuenta de Google' : 'Conectar Google Workspace'}</Button>{google.email && <Button type="button" variant="outline" onClick={disconnectGoogle}>Desconectar esta sesión</Button>}</div>
@@ -29,7 +29,7 @@ export function GoogleConnection({ showSetup = false }: { showSetup?: boolean })
       <label>Número del proyecto de Google<Input value={config.projectNumber} onChange={e => setConfig({ ...config, projectNumber: e.target.value.trim() })}/></label>
       <label>Clave pública del selector de Drive<Input value={config.pickerKey} onChange={e => setConfig({ ...config, pickerKey: e.target.value.trim() })}/></label>
       <a className="text-sm underline" href="https://github.com/Cuffa28/agenda-amauta/blob/main/GOOGLE_WORKSPACE.md" target="_blank" rel="noopener noreferrer">Ver guía de configuración de Google Workspace</a>
-      <p className="text-xs">Restringí la clave del selector al sitio de Agenda, docs.google.com y Google Picker API. Habilitá Drive API, Gmail API, Calendar API y Google Picker API en el mismo proyecto.</p><Button type="submit" variant="outline">Guardar configuración pública</Button>
+      <p className="text-xs">Restringí la clave del selector al sitio de Agenda y docs.google.com, y a Google Picker API y Google Drive API. Habilitá Drive API, Gmail API, Calendar API y Google Picker API en el mismo proyecto.</p><Button type="submit" variant="outline">Guardar configuración pública</Button>
     </form></details>}
   </div>;
 }

@@ -102,7 +102,7 @@ export function ReviewPanel({
 }
 
 function SnapshotBox({ snapshot, latestVersion }: { snapshot: MarketViewSnapshot|null; latestVersion?: number | undefined }) {
-  if(!snapshot)return <p className="rounded border p-3 text-sm">Esta revisión no tiene una visión de mercado asociada. No se adjuntará una lectura de mercado inventada al borrador.</p>;
+  if(!snapshot)return <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">Visión de mercado opcional. Podés revisar esta cartera sin asociar una lectura de mercado.</p>;
   return (
     <div className="rounded-md border border-turquoise/40 bg-accent/50 p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -258,10 +258,10 @@ function DecisionForm({ review }: { review: Review }) {
             <label
               key={t}
               htmlFor={`dec-${t}`}
-              className="flex cursor-pointer items-center gap-2 rounded-md border bg-card px-3 py-2.5 text-sm font-medium transition-colors has-[[data-state=checked]]:border-turquoise has-[[data-state=checked]]:bg-accent"
+              className="decision-choice flex cursor-pointer items-center gap-3 border bg-card px-4 py-3 text-sm font-medium transition-colors has-[[data-state=checked]]:border-turquoise has-[[data-state=checked]]:bg-accent"
             >
               <RadioGroupItem id={`dec-${t}`} value={t} />
-              {DECISION_LABELS[t]}
+              <span className="decision-copy">{DECISION_LABELS[t]}<small>{t === 'mantener' ? 'Conservar la estrategia.' : t === 'proponer_cambio' ? 'Documentar el cambio.' : 'Pedir el dato que falta.'}</small></span>
             </label>
           ))}
         </RadioGroup>

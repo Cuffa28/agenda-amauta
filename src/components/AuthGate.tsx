@@ -1,3 +1,4 @@
+import { AmautaBrand } from '@/components/AmautaBrand';
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
@@ -87,9 +88,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (demo) return <>{children}</>;
-  if (session && allowed) return <><div className="flex items-center justify-end gap-4 border-b bg-card p-2 text-xs"><span>{session.user.email}</span><Button variant="ghost" size="sm" onClick={() => void getSupabase().auth.signOut()}>Cerrar sesión</Button></div><Suspense fallback={<p className="p-8">Cargando agenda…</p>}>{children}</Suspense></>;
-  return <div className="grid min-h-screen place-items-center bg-background p-6"><section className="surface-card w-full max-w-md space-y-5 p-8">
-    <h1 className="text-2xl font-semibold">Agenda Amauta</h1>
+  if (session && allowed) return <><div className="account-session"><span>{session.user.email}</span><Button variant="ghost" size="sm" onClick={() => void getSupabase().auth.signOut()}>Cerrar sesión</Button></div><Suspense fallback={<p className="p-8">Cargando agenda…</p>}>{children}</Suspense></>;
+  return <div className="login-page"><aside className="login-story"><AmautaBrand dark/><div className="login-story-copy"><span>Agenda Amauta</span><h2>Tu criterio.<br/>Una mirada<br/><em>propia.</em></h2><p>El espacio para pensar cada cartera, documentar decisiones y acompañar lo que sigue.</p></div><div className="login-story-footer"><span>FACUNDO ARGAÑARAZ</span><span>AMAUTA INVERSIONES</span></div></aside><div className="login-form-panel"><section className="login-card space-y-5"><div className="login-eyebrow">TU ESPACIO DE TRABAJO</div>
+    <h1>Entrá a tu agenda.</h1>
     <p className="text-sm text-muted-foreground">Ingresá con tu cuenta autorizada de Amauta.</p>
     {!loaded ? <p>Comprobando sesión…</p> : session && !error ? <p role="status">Comprobando acceso…</p> : <>
       <form className="space-y-3" onSubmit={e => { e.preventDefault(); void login(usePassword ? 'password' : sentTo ? 'verify' : 'email'); }}>
@@ -115,5 +116,5 @@ export function AuthGate({ children }: { children: ReactNode }) {
     </>}
     {error && <p role="alert" className="text-sm">{error}</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
-  </section></div>;
+  <div className="login-privacy">Acceso privado para las cuentas autorizadas de Agenda Amauta.</div></section></div></div>;
 }

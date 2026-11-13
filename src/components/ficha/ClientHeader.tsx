@@ -32,7 +32,7 @@ export function ClientHeader({
   status: PortfolioMonthStatus;
 }) {
   return (
-    <div className="surface-card p-5">
+    <div className="surface-card client-overview">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

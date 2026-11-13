@@ -1,3 +1,4 @@
+import { ArrowUpRight, CalendarDays, Check, ClipboardList, Clock3, Focus, UsersRound } from 'lucide-react';
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -75,51 +76,57 @@ function ResumenPage() {
   );
 
   const setMonth = (m: string) => navigate({ search: { mes: m } });
+  const priority = (s: PortfolioMonthStatus) => s.status === 'en_curso' ? 0 : s.isOverdue ? 1 : s.isDueToday ? 2 : 3;
+  const nextReview = summary.statuses.filter(s => !s.countsAsReviewed).sort((a,b) => priority(a)-priority(b) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.clientId.localeCompare(b.clientId))[0];
+  const remaining = summary.total-summary.reviewed;
+
 
   return (
     <>
       <PageHeader
         eyebrow={`Revisión mensual · ${clients.length} carteras`}
-        title="Resumen"
-        description={<>Hoy: {formatDateLong(today)} · hora de Buenos Aires</>}
+        title="Tu agenda, Facundo."
+        description={<>Una mirada clara sobre tus carteras. {formatDateLong(today)}.</>}
         actions={<MonthPicker value={month} onChange={setMonth} />}
       />
 
+      <section className="focus-hero" aria-label="Foco y cobertura mensual">
+        <div className="focus-copy"><div className="hero-eyebrow"><span/>Tu mesa de inversión</div>
+          <h2>{remaining ? <>Cada cartera,<br/>con una decisión.</> : <>Tu mes,<br/>al día.</>}</h2>
+          <p>{remaining ? `${remaining} carteras por revisar en ${formatMonthLabel(month).toLowerCase()}. Documentá tu criterio y dejá claro el próximo paso.` : 'Todas las carteras tienen su revisión cerrada. Los pendientes conservan su seguimiento.'}</p>
+          <div className="hero-actions"><Link to="/clientes" search={{mes:month}}>Revisar carteras <ArrowUpRight size={14}/></Link><Link to="/seguimientos">Organizar mi tiempo <CalendarDays size={14}/></Link></div>
+        </div>
+        <div className="coverage-panel"><div className="coverage-ring" role="img" aria-label={`Cobertura mensual: ${formatPercent(summary.coverage)}`}>
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="51" fill="none" stroke="#ffffff12" strokeWidth="5"/><circle cx="60" cy="60" r="51" fill="none" stroke="#c7e5a2" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${summary.coverage*320.44} 320.44`}/></svg>
+          <div className="coverage-value">{formatPercent(summary.coverage)}<span>Cobertura</span></div>
+        </div><div className="coverage-period">{formatMonthLabel(month)}</div><div className="coverage-count">{summary.reviewed} de {summary.total} carteras revisadas</div></div>
+      </section>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Carteras bajo seguimiento" value={summary.total} sub={`${summary.reviewed} revisadas · ${summary.inProgress} en curso`} icon={<UsersRound/>}/>
         <KpiCard
-          label={`Cobertura · ${formatMonthLabel(month)}`}
-          value={formatPercent(summary.coverage)}
-          tone="accent"
-          sub={
-            <>
-              {summary.reviewed} de {summary.total} revisadas
-              {summary.reviewedWithOpenPending > 0 &&
-                ` · incluye ${summary.reviewedWithOpenPending} con pendiente abierto`}
-            </>
-          }
-        >
-          <Progress value={summary.coverage * 100} className="h-1.5" aria-label="Cobertura mensual" />
-        </KpiCard>
-        <KpiCard
-          label="Vencen hoy"
+          label="Para hoy"
+          icon={<CalendarDays/>}
           value={summary.dueToday.length + pendingsToday.length}
           tone="warning"
           sub={`${summary.dueToday.length} carteras del mes · ${pendingsToday.length} pendientes`}
         />
         <KpiCard
           label="Carteras atrasadas"
+          icon={<Clock3/>}
           value={summary.overdue.length}
           tone={summary.overdue.length ? "danger" : "default"}
           sub={`${summary.inProgress} en curso en ${formatMonthLabel(month).toLowerCase()}`}
         />
         <KpiCard
           label="Pendientes abiertos"
+          icon={<ClipboardList/>}
           value={ranked.items.length}
           tone={ranked.counts.vencido ? "danger" : "default"}
           sub={`${ranked.counts.vencido} vencidos · ${ranked.counts.hoy} hoy · ${ranked.counts.proximos_7_dias} en 7 días`}
         />
       </div>
 
+      {nextReview && <section className="focus-next" aria-label="Próxima cartera para revisar"><div><div className="focus-next-label"><Focus size={12}/>{nextReview.status === 'en_curso' ? 'Retomá donde quedaste' : 'Una cartera para empezar'}</div><div className="focus-next-name">{clientById.get(nextReview.clientId)?.name}</div><div className="focus-next-meta">{nextReview.clientId} · {advisorById.get(clientById.get(nextReview.clientId)?.advisorId || '')?.name || 'Asesor sin asignar'} · {nextReview.dueDate ? `Vence ${formatDate(nextReview.dueDate)}` : 'Sin fecha mensual asignada'}</div></div><Link to="/clientes/$clientId" params={{clientId:nextReview.clientId}} search={{mes:month}}>{nextReview.status === 'en_curso' ? 'Continuar revisión' : 'Abrir ficha'} <ArrowUpRight size={16}/></Link></section>}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <SectionCard
           title="Agenda de hoy"
@@ -330,6 +337,6 @@ function ClientLink({ id, name, month }: { id: string; name?: string | undefined
 }
 
 function Empty({ children }: { children: string }) {
-  return <p className="py-6 text-center text-sm text-muted-foreground">{children}</p>;
+  return <div className="empty-state"><span className="empty-state-icon"><Check size={16}/></span><p>{children}</p></div>;
 }
 

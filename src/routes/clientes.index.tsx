@@ -1,3 +1,4 @@
+import { InitialsAvatar } from '@/components/AmautaBrand';
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
@@ -63,13 +64,13 @@ function ClientesPage() {
   return (
     <>
       <PageHeader
-        eyebrow={formatMonthLabel(month)}
-        title="Clientes"
+        eyebrow={`Directorio · ${formatMonthLabel(month)}`}
+        title="Tus carteras"
         description={`${rows.length} de ${clients.length} carteras`}
         actions={<MonthPicker value={month} onChange={(m) => navigate({ search: { mes: m } })} />}
       />
 
-      <div className="surface-card mb-4 grid gap-3 p-4 md:grid-cols-4">
+      <div className="surface-card filter-bar mb-5 grid gap-3 md:grid-cols-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por ID o nombre" className="pl-8" aria-label="Buscar cliente" />
@@ -100,10 +101,9 @@ function ClientesPage() {
       </div>
 
       <div className="surface-card overflow-x-auto">
-        <Table>
+        <Table className="client-table">
           <TableHeader className="bg-table-head">
             <TableRow>
-              <TableHead className="w-20">ID</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Segmento</TableHead>
               <TableHead className="hidden lg:table-cell">Sector</TableHead>
@@ -116,8 +116,7 @@ function ClientesPage() {
           <TableBody>
             {rows.map(({ client, status: s }) => (
               <TableRow key={client.id}>
-                <TableCell className="font-mono text-sm">{client.id}</TableCell>
-                <TableCell>
+                <TableCell><div className="client-name-cell"><InitialsAvatar name={client.name}/><div>
                   <Link
                     to="/clientes/$clientId"
                     params={{ clientId: client.id }}
@@ -126,9 +125,9 @@ function ClientesPage() {
                   >
                     {client.name}
                   </Link>
-                  {client.isDemo && <span className="ml-2 align-middle"><DemoBadge /></span>}
-                </TableCell>
-                <TableCell>{client.segment}</TableCell>
+                  <div className="client-id-label">{client.id}</div>{client.isDemo && <span className="ml-2 align-middle"><DemoBadge /></span>}
+                </div></div></TableCell>
+                <TableCell><span className={`segment-tag segment-${client.segment}`}>{client.segment}</span></TableCell>
                 <TableCell className="hidden text-muted-foreground lg:table-cell">{client.sector ?? "—"}</TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{advisorById.get(client.advisorId)?.name}</TableCell>
                 <TableCell className="whitespace-nowrap font-mono tabular-nums">{formatDate(s.dueDate)}</TableCell>
@@ -138,7 +137,7 @@ function ClientesPage() {
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   Ningún cliente coincide con los filtros.
                 </TableCell>
               </TableRow>

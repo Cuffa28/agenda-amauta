@@ -36,15 +36,15 @@ function ClientPage() {
   const previousConclusion = review?.previousConclusion || (prior?.decision ? describeDecision(prior.decision) : null);
   return <div className="grid gap-6">
     <ClientHeader client={client} advisor={advisor} advisors={advisors} status={status}/>
-    <nav aria-label="Secciones de la ficha" className="flex flex-wrap gap-3 text-sm">
-      <a className="rounded border px-3 py-2 hover:bg-accent" href="#revision">1. Revisión</a>
-      <a className="rounded border px-3 py-2 hover:bg-accent" href="#posicion">2. Posición y PDF</a>
-      <a className="rounded border px-3 py-2 hover:bg-accent" href="#borrador">3. Borrador al asesor</a>
-      <a className="rounded border px-3 py-2 hover:bg-accent" href="#pendientes">4. Pendientes</a>
+    <nav aria-label="Secciones de la ficha" className="workflow-nav">
+      <a  href="#revision"><span className="step-index">01</span><span>Revisión<small>Documentar tu criterio</small></span></a>
+      <a  href="#posicion"><span className="step-index">02</span><span>Posición y PDF<small>La foto de la cartera</small></span></a>
+      <a  href="#borrador"><span className="step-index">03</span><span>Borrador al asesor<small>Preparar la conversación</small></span></a>
+      <a  href="#pendientes"><span className="step-index">04</span><span>Pendientes<small>El próximo paso</small></span></a>
     </nav>
     {client.liquidityNote && <SectionCard title="Mandato del cliente"><p>{client.liquidityNote}</p></SectionCard>}
     <section id="revision" className="scroll-mt-4">
-      {!position && <p className="mb-3 rounded border bg-muted/40 p-3 text-sm">Todavía no hay posición cargada. Podés iniciar para pedir información o <a className="underline" href="#posicion">cargar el PDF</a> antes de documentar tu decisión.</p>}
+      {!position && <p className="mb-3 rounded-xl border bg-white/60 p-4 text-xs text-muted-foreground">Todavía no hay posición cargada. Podés iniciar para pedir información o <a className="underline" href="#posicion">cargar el PDF</a> antes de documentar tu decisión.</p>}
       <ReviewPanel clientId={clientId} month={month} status={status} marketView={marketView} position={position}/>
     </section>
     {previousConclusion && <SectionCard title="Conclusión anterior"><p>{previousConclusion}</p></SectionCard>}

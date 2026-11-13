@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthGate } from '@/components/AuthGate';
@@ -82,6 +82,46 @@ describe('Acceso a Agenda', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('El código venció');
     expect(screen.queryByText('Ficha privada')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Código de acceso')).toHaveValue('');
+  });
+
+  it('conserva texto y caché al reconfirmar la misma cuenta al volver a la pestaña', async () => {
+    api.getSession.mockResolvedValue({ data: { session }, error: null });
+    const client=new QueryClient();
+    render(<QueryClientProvider client={client}><AuthGate><textarea aria-label="Nota sin guardar" defaultValue=""/></AuthGate></QueryClientProvider>);
+    const field=await screen.findByRole('textbox',{name:'Nota sin guardar'});
+    fireEvent.change(field,{target:{value:'Texto todavía sin guardar'}});
+    client.setQueryData(['reviews'],['persisted-cache']);
+    let finish!:()=>void;
+    api.requireSession.mockReturnValue(new Promise<void>(resolve=>{finish=resolve;}));
+    const authEvent=api.onAuthStateChange.mock.calls[0]![0];
+    await act(async()=>authEvent('SIGNED_IN',{...session,access_token:'synthetic-refreshed-token'}));
+    expect(screen.getByRole('textbox',{name:'Nota sin guardar'})).toBe(field);
+    expect(field).toHaveValue('Texto todavía sin guardar');
+    expect(client.getQueryData(['reviews'])).toEqual(['persisted-cache']);
+    await act(async()=>finish());
+  });
+  it('limpia la caché y bloquea la ficha antes de autorizar otra cuenta', async () => {
+    api.getSession.mockResolvedValue({ data: { session }, error: null });
+    const client=new QueryClient();
+    render(<QueryClientProvider client={client}><AuthGate><div>Ficha privada</div></AuthGate></QueryClientProvider>);
+    await screen.findByText('Ficha privada');client.setQueryData(['reviews'],['private-cache']);
+    api.requireSession.mockReturnValue(new Promise(()=>{}));
+    const authEvent=api.onAuthStateChange.mock.calls[0]![0];
+    await act(async()=>authEvent('SIGNED_IN',{user:{id:'other-user',email:'other@example.com'}}));
+    expect(screen.queryByText('Ficha privada')).not.toBeInTheDocument();
+    expect(client.getQueryData(['reviews'])).toBeUndefined();
+  });
+  it('bloquea la ficha si la revalidación de la misma cuenta detecta acceso revocado', async () => {
+    api.getSession.mockResolvedValue({ data: { session }, error: null });
+    const client=new QueryClient();
+    render(<QueryClientProvider client={client}><AuthGate><div>Ficha privada</div></AuthGate></QueryClientProvider>);
+    await screen.findByText('Ficha privada');client.setQueryData(['reviews'],['private-cache']);
+    api.requireSession.mockRejectedValue(new Error('Acceso revocado'));
+    const authEvent=api.onAuthStateChange.mock.calls[0]![0];
+    await act(async()=>authEvent('SIGNED_IN',{...session,access_token:'synthetic-token'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Acceso revocado');
+    expect(screen.queryByText('Ficha privada')).not.toBeInTheDocument();
+    expect(client.getQueryData(['reviews'])).toBeUndefined();
   });
 
 });

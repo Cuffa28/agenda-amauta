@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabase, requireAgendaSession } from '@/data/supabase/client';
@@ -15,6 +15,7 @@ function loginError(error: unknown): string {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const authorizedUserId = useRef<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loaded, setLoaded] = useState(false), [allowed, setAllowed] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -26,17 +27,22 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (demo) return;
-    let active = true;
+    let active = true, authChanged = false;
+    let currentUserId: string | null = null;
     try {
       const sb = getSupabase();
       void sb.auth.getSession().then(({ data, error }) => {
-        if (!active) return;
+        if (!active || authChanged) return;
+        currentUserId = data.session?.user.id ?? null;
         if (error) setError(loginError(error));
         setSession(data.session); setLoaded(true);
       }).catch(e => { if (active) { setError(loginError(e)); setLoaded(true); } });
       const { data } = sb.auth.onAuthStateChange((event, s) => {
         if (!active) return;
-        if (event === 'SIGNED_OUT' || event === 'SIGNED_IN') { queryClient.clear(); setAllowed(false); }
+        authChanged = true;
+        const nextUserId = s?.user.id ?? null;
+        if (event === 'SIGNED_OUT' || nextUserId !== currentUserId) { queryClient.clear(); authorizedUserId.current = null; setAllowed(false); }
+        currentUserId = nextUserId;
         setSession(s); setLoaded(true);
       });
       return () => { active = false; data.subscription.unsubscribe(); };
@@ -45,14 +51,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }, [demo, queryClient]);
 
   useEffect(() => {
-    setAllowed(false);
-    if (!session) return;
+    if (!session) { authorizedUserId.current = null; setAllowed(false); return; }
+    // Revalidar la misma cuenta en segundo plano conserva el formulario abierto.
+    if (authorizedUserId.current !== session.user.id) setAllowed(false);
     let active = true;
     void requireAgendaSession().then(() => {
-      if (active) { setAllowed(true); setError(''); }
-    }).catch(e => { if (active) { setAllowed(false); setError(loginError(e)); } });
+      if (active) { authorizedUserId.current = session.user.id; setAllowed(true); setError(''); }
+    }).catch(e => { if (active) { authorizedUserId.current = null; queryClient.clear(); setAllowed(false); setError(loginError(e)); } });
     return () => { active = false; };
-  }, [session]);
+  }, [session, queryClient]);
 
   async function login(method: 'google' | 'email' | 'password' | 'verify') {
     setBusy(true); setError(''); setNotice('');

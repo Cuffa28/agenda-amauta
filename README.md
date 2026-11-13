@@ -39,3 +39,5 @@ Ver GOOGLE_WORKSPACE.md para autorizar los servicios en el proyecto corporativo.
 - «Copiar para este chat» copia destinatario, asunto y cuerpo editado. No envía ni crea un correo externo. El usuario lo pega en su chat y solicita la revisión o el envío. La cuenta conectada al chat es independiente de la conexión Google de Agenda.
 - «Guardar borrador en Gmail» conserva el consentimiento Google existente y requiere la configuración OAuth descrita en GOOGLE_WORKSPACE.md. La app no envía mensajes.
 - Los correos de asesores se guardan en agenda_clients, fuera del código público, y se pueden modificar desde Editar ficha.
+
+Una revisión iniciada por prueba se puede cerrar vacía: se archiva sin crear una revisión completada ni sumar cobertura. Se puede iniciar otra vez. Si ya tiene una decisión, un pendiente, un seguimiento o un correo guardado, se conserva el flujo habitual. Las posiciones y los PDFs se conservan.

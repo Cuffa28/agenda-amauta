@@ -8,8 +8,8 @@ import { portfolioMonthStatus } from '@/domain/coverage';
 import type { Review } from '@/domain/schemas';
 import type { DraftSource } from '@/domain/email-draft';
 
-const mock = vi.hoisted(() => ({ start: vi.fn(), list: vi.fn() }));
-vi.mock('@/data/index', () => ({ getRepository: () => ({ startReview: mock.start, listReviews: mock.list }) }));
+const mock = vi.hoisted(() => ({ start: vi.fn(), list: vi.fn(), cancel: vi.fn() }));
+vi.mock('@/data/index', () => ({ getRepository: () => ({ startReview: mock.start, listReviews: mock.list, cancelEmptyReview: mock.cancel }) }));
 vi.mock('@/integrations/google/GoogleConnection', () => ({ GoogleConnection: () => null, useGoogleWorkspace: () => ({ connected: false, email: '' }) }));
 const review: Review = { id:'review-1', clientId:'00123-00', month:'2026-11', status:'en_curso', positionId:null,
   decision:null, previousConclusion:null, marketViewSnapshot:null, startedAt:'2026-11-13T12:00:00Z', closedAt:null };
@@ -46,4 +46,16 @@ describe('Inicio de revisión y borrador rápido', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Para: asesor@example.com')));
     expect(writeText.mock.calls[0]?.[0]).toContain('Este es el texto editado');
   });
+  it('cierra una prueba vacía sin exigir decisión ni marcarla como revisada', async () => {
+    mock.cancel.mockResolvedValue(review);
+    const client=new QueryClient();
+    client.setQueryData(['reviews'],[review]);client.setQueryData(['reviews',review.clientId],[review]);
+    render(<QueryClientProvider client={client}><Harness/></QueryClientProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'Cerrar revisión'}));
+    expect(await screen.findByRole('button',{name:'Iniciar revisión'})).toBeVisible();
+    expect(mock.cancel).toHaveBeenCalledWith(review.id);
+    expect(screen.queryByText('Elegí una decisión')).not.toBeInTheDocument();
+    expect(client.getQueryData(['reviews'])).toEqual([]);
+  });
+
 });

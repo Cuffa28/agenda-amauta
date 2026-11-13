@@ -1,6 +1,6 @@
 import { Lock, PlayCircle, LoaderCircle } from "lucide-react";
 import { useQueryClient } from '@tanstack/react-query';
-import { cacheSavedReview } from '@/data/review-cache';
+import { cacheSavedReview, removeCancelledReview } from '@/data/review-cache';
 import { useState } from "react";
 
 import { Field } from "@/components/Field";
@@ -220,6 +220,15 @@ function DecisionForm({ review }: { review: Review }) {
     { success: "Revisión cerrada: la cartera cuenta como revisada", invalidate: ['pendings'], onSuccess: saved => cacheSavedReview(queryClient, saved) },
   );
 
+  const cancel = useRepoMutation((repo, _: void) => repo.cancelEmptyReview(review.id), {
+    success: 'Revisión vacía cerrada. Podés iniciarla nuevamente cuando quieras.', invalidate: [],
+    onSuccess: cancelled => removeCancelledReview(queryClient, cancelled),
+  });
+  const cancelEmpty = () => {
+    if (state.type && !window.confirm('¿Cerrar sin guardar lo que escribiste? La cartera no se marcará como revisada.')) return;
+    cancel.mutate();
+  };
+
   const validate = (): Decision | null => {
     if (!state.type) {
       setErrors({ type: "Elegí una decisión" });
@@ -235,7 +244,7 @@ function DecisionForm({ review }: { review: Review }) {
     return parsed.data;
   };
 
-  const busy = save.isPending || close.isPending;
+  const busy = save.isPending || close.isPending || cancel.isPending;
 
   return (
     <div className="grid gap-5">
@@ -309,10 +318,13 @@ function DecisionForm({ review }: { review: Review }) {
         <Button variant="outline" disabled={busy} onClick={() => { const d = validate(); if (d) save.mutate(d); }}>
           {save.isPending ? 'Guardando…' : 'Guardar decisión'}
         </Button>
-        <Button disabled={busy} onClick={() => { const d = validate(); if (d) close.mutate(d); }}>
-          {close.isPending ? 'Cerrando…' : 'Cerrar revisión'}
+        <Button disabled={busy} onClick={() => { if (!state.type && !review.decision) { cancelEmpty(); return; } const d = validate(); if (d) close.mutate(d); }}>
+          {cancel.isPending ? 'Cerrando prueba…' : close.isPending ? 'Cerrando…' : 'Cerrar revisión'}
         </Button>
+        {!review.decision && state.type && <Button variant="ghost" disabled={busy} onClick={cancelEmpty}>Cerrar sin guardar</Button>}
       </div>
+      {!review.decision && !state.type && <p className="text-xs text-muted-foreground">Si la abriste para probar, Cerrar revisión la deja sin iniciar y no suma a la cobertura mensual.</p>}
+      {cancel.error && <p role="alert" className="text-sm text-destructive">{cancel.error.message}</p>}
     </div>
   );
 }

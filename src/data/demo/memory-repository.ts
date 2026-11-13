@@ -131,6 +131,14 @@ export function createMemoryRepository(
       return clone(review);
     },
 
+    async cancelEmptyReview(reviewId) {
+      const review = findReview(reviewId);
+      if (review.decision || review.status === 'cerrada') throw new RepositoryRuleError('Esta revisión ya tiene una decisión guardada');
+      if (state.pendings.some(p => p.reviewId === reviewId) || state.drafts.some(d => d.reviewId === reviewId) || state.followUps.some(f => 'reviewId' in f.link && f.link.reviewId === reviewId)) throw new RepositoryRuleError('Esta revisión tiene datos guardados. No está vacía.');
+      state.reviews = state.reviews.filter(r => r.id !== reviewId);
+      return clone(review);
+    },
+
     async setReviewPosition(reviewId, positionId) {
       const review = findReview(reviewId);
       if (review.status === 'cerrada') throw new RepositoryRuleError('La revisión ya está cerrada');

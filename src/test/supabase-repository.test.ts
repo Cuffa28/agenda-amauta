@@ -111,4 +111,29 @@ describe('Adaptador de datos reales',()=>{
     await expect(repo.setReviewPosition(r.id,'new-position')).rejects.toThrow('cerrada');
   });
 
+  it('archiva la prueba vacía, no aumenta cobertura y permite comenzar nuevamente', async () => {
+    const d=database(),repo=createSupabaseRepository(()=>d.client), input={clientId:'0000-00',month:'2026-11'};
+    const r=await repo.startReview(input);
+    await repo.cancelEmptyReview(r.id);
+    const reopened=createSupabaseRepository(()=>d.client);
+    expect(await reopened.listReviews(input.clientId)).toEqual([]);
+    expect(d.tables['agenda_reviews']).toHaveLength(0);
+    expect(d.tables['agenda_drafts']![0].source_snapshot.kind).toBe('review_cancelled');
+    const state=portfolioMonthStatus({id:input.clientId,reviewDay:0},input.month,await reopened.listReviews(),[],'2026-11-13');
+    expect(state.countsAsReviewed).toBe(false);expect(state.status).toBe('sin_programar');
+    const again=await reopened.startReview(input);
+    expect(again.id).toBe(r.id);expect(await reopened.listReviews(input.clientId)).toHaveLength(1);
+    expect(d.tables['agenda_drafts']).toHaveLength(1);
+    await reopened.saveDecision(again.id,{type:'mantener',nota:'Conservar esta decisión registrada'});
+    await expect(reopened.cancelEmptyReview(again.id)).rejects.toThrow('decisión guardada');
+    expect((await reopened.listReviews(input.clientId))[0]?.decision?.type).toBe('mantener');
+  });
+  it('no descarta una revisión con un pendiente guardado', async () => {
+    const d=database(),repo=createSupabaseRepository(()=>d.client);
+    const r=await repo.startReview({clientId:'0000-00',month:'2026-11'});
+    await repo.createPending({clientId:r.clientId,reviewId:r.id,origin:'manual',description:'Información a validar con el asesor',dueDate:'2026-11-20'});
+    await expect(repo.cancelEmptyReview(r.id)).rejects.toThrow('No está vacía');
+    expect(await repo.listReviews(r.clientId)).toHaveLength(1);expect(await repo.listPendings(r.clientId)).toHaveLength(1);
+  });
+
 });

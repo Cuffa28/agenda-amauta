@@ -53,7 +53,23 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const previous = reviews.filter(r => r['clientId'] === clientId && r['month'] < month && r['status'] === 'cerrada').sort((a,b) => b['month'].localeCompare(a['month']))[0];
       const at = new Date().toISOString(), id = await stableUuid(`agenda-review:${clientId}:${month}`);
       const review: Review = { id, clientId, month, status: 'en_curso', decision: null, positionId: positions.find(p => p.clientId === clientId)?.id || null, previousConclusion: previous?.decision ? describeDecision(previous.decision) : null, marketViewSnapshot: v ? { versionId: v.id, version: v.version, title: v.title, summary: v.summary, body: v.body, publishedAt: v.publishedAt, capturedAt: at } : null, startedAt: at, closedAt: null };
+      const { data: archived, error: archivedError } = await db().from('agenda_drafts').select('*').eq('id', id).maybeSingle();
+      if (archivedError) throw archivedError;
+      if (archived?.['source_snapshot']?.kind === 'review_cancelled') {
+        await update('agenda_drafts', id, { source_snapshot: { ...archived['source_snapshot'], kind: 'review_workspace', review } }, archived['updated_at']);
+        return review;
+      }
       try { await insert('agenda_drafts', { id, client_id: clientId, subject: 'Revisión en curso', body: '', source_snapshot: { kind: 'review_workspace', review } }); } catch (e) { if ((e as {code?: string}).code !== '23505') throw e; return findReview(id); } return review;
+    },
+    async cancelEmptyReview(id) {
+      const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;
+      const [completed, tasks, drafts] = await Promise.all([rows('agenda_reviews', review.clientId), rows('agenda_tasks', review.clientId), rows('agenda_drafts', review.clientId, 'email_draft')]);
+      if (review.decision || completed.some(r => r['id'] === id)) throw new RepositoryRuleError('Esta revisión ya tiene una decisión guardada. Conservá el cierre habitual.');
+      if (tasks.some(r => r['review_id'] === id || decode(r['notes'])['reviewId'] === id || decode(r['notes'])['input']?.link?.reviewId === id) || drafts.some(r => r['source_snapshot']?.input?.reviewId === id)) {
+        throw new RepositoryRuleError('Esta revisión tiene pendientes, seguimientos o borradores guardados. No está vacía.');
+      }
+      await update('agenda_drafts', id, { source_snapshot: { ...w['source_snapshot'], kind: 'review_cancelled', cancellations: [...(w['source_snapshot'].cancellations || []), new Date().toISOString()] } }, w['updated_at']);
+      return review;
     },
     async setReviewPosition(id, positionId) {
       const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;

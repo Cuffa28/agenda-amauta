@@ -45,6 +45,7 @@ export interface AgendaRepository {
   setReviewPosition(reviewId: string, positionId: string): Promise<Review>;
   saveDecision(reviewId: string, decision: Decision): Promise<Review>;
   closeReview(reviewId: string): Promise<Review>;
+  cancelEmptyReview(reviewId: string): Promise<Review>;
   listPendings(clientId?: string): Promise<PendingItem[]>;
   createPending(input: PendingInput): Promise<PendingItem>;
   resolvePending(id: string): Promise<PendingItem>;

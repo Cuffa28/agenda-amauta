@@ -9,3 +9,9 @@ export function cacheSavedReview(client: QueryClient, review: Review) {
       : undefined);
   }
 }
+
+export function removeCancelledReview(client: QueryClient, review: Review) {
+  for (const key of [['reviews'], ['reviews', review.clientId]]) {
+    client.setQueryData<Review[]>(key, old => old?.filter(row => row.id !== review.id));
+  }
+}

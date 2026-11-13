@@ -97,7 +97,7 @@ function ResumenPage() {
           <div className="hero-actions"><Link to="/clientes" search={{mes:month}}>Revisar carteras <ArrowUpRight size={14}/></Link><Link to="/seguimientos">Organizar mi tiempo <CalendarDays size={14}/></Link></div>
         </div>
         <div className="coverage-panel"><div className="coverage-ring" role="img" aria-label={`Cobertura mensual: ${formatPercent(summary.coverage)}`}>
-          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="51" fill="none" stroke="#ffffff12" strokeWidth="5"/><circle cx="60" cy="60" r="51" fill="none" stroke="#c7e5a2" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${summary.coverage*320.44} 320.44`}/></svg>
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="51" fill="none" stroke="#ffffff12" strokeWidth="5"/><circle cx="60" cy="60" r="51" fill="none" stroke="#f4d00f" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${summary.coverage*320.44} 320.44`}/></svg>
           <div className="coverage-value">{formatPercent(summary.coverage)}<span>Cobertura</span></div>
         </div><div className="coverage-period">{formatMonthLabel(month)}</div><div className="coverage-count">{summary.reviewed} de {summary.total} carteras revisadas</div></div>
       </section>

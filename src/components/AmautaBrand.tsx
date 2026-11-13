@@ -1,14 +1,7 @@
-export function AmautaMark({ className = '' }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-    <path d="M7 35 21 10h6l14 25h-8L24 18l-9 17H7Z" fill="currentColor"/>
-    <path d="M18 32h12l4 7H14l4-7Z" fill="currentColor" opacity=".55"/>
-  </svg>;
-}
-
+/** Official vector artwork extracted from the supplied Amauta brand PDF. */
 export function AmautaBrand({ dark = false }: { dark?: boolean }) {
   return <div className={`amauta-brand ${dark ? 'brand-on-dark' : ''}`}>
-    <span className="brand-symbol"><AmautaMark/></span>
-    <div><span className="brand-wordmark">amauta<span>.</span></span><span className="brand-caption">INVERSIONES</span></div>
+    <img className="brand-logo" src={dark ? '/brand/amauta-logo-inverse.svg' : '/brand/amauta-logo.svg'} width="331" height="90" alt="Amauta · Inversiones Financieras" />
   </div>;
 }
 

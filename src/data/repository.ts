@@ -37,19 +37,20 @@ export interface AgendaRepository {
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;
   /** Última posición conocida de cada cliente. */
-  listPositions(): Promise<Position[]>;
+  listPositions(clientId?: string): Promise<Position[]>;
   savePosition(input: Position): Promise<Position>;
-  listReviews(): Promise<Review[]>;
+  listReviews(clientId?: string): Promise<Review[]>;
   /** Crea la revisión del mes y congela la versión vigente de la visión de mercado. */
   startReview(input: { clientId: string; month: string }): Promise<Review>;
+  setReviewPosition(reviewId: string, positionId: string): Promise<Review>;
   saveDecision(reviewId: string, decision: Decision): Promise<Review>;
   closeReview(reviewId: string): Promise<Review>;
-  listPendings(): Promise<PendingItem[]>;
+  listPendings(clientId?: string): Promise<PendingItem[]>;
   createPending(input: PendingInput): Promise<PendingItem>;
   resolvePending(id: string): Promise<PendingItem>;
   getMarketView(): Promise<MarketView>;
   publishMarketViewVersion(input: MarketViewVersionInput): Promise<MarketViewVersion>;
-  listEmailDrafts(): Promise<EmailDraft[]>;
+  listEmailDrafts(clientId?: string): Promise<EmailDraft[]>;
   saveEmailDraft(input: EmailDraftInput): Promise<EmailDraft>;
   listFollowUps(): Promise<FollowUp[]>;
   createFollowUp(input: FollowUpInput): Promise<FollowUp>;

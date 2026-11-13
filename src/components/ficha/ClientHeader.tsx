@@ -80,7 +80,7 @@ function ClientEditDialog({ client, advisors }: { client: Client; advisors: Advi
   const [errors, setErrors] = useState<Record<string, string>>({});
   const mutation = useRepoMutation(
     (repo, patch: Parameters<typeof repo.updateClient>[1]) => repo.updateClient(client.id, patch),
-    { success: "Ficha actualizada", onSuccess: () => setOpen(false) },
+    { invalidate: ["clients", "advisors", "drafts"], success: "Ficha actualizada", onSuccess: () => setOpen(false) },
   );
 
   const submit = () => {

@@ -14,7 +14,7 @@ export function PositionEditor({clientId}:{clientId:string}) {
   const google=useGoogleWorkspace(); const [driveBusy,setDriveBusy]=useState(false);
   const [pdfName,setPdfName]=useState(''),[sourceNote,setSourceNote]=useState('');
   async function selectPdf(file?:File){setDriveBusy(true);setError('');try{const pdf=file?await uploadDrivePdf(file):await pickDrivePdf();if(pdf){setUrl(pdf.webViewLink || `https://drive.google.com/file/d/${pdf.id}/view`);setPdfName(pdf.name);}}catch(e){setError((e as Error).message);}finally{setDriveBusy(false);}}
-  const save=useRepoMutation((repo,p:Position)=>repo.savePosition(p),{success:'Nueva posición guardada; el historial anterior se conserva'});
+  const save=useRepoMutation((repo,p:Position)=>repo.savePosition(p),{invalidate:['positions','position-history'],success:'Nueva posición guardada; el historial anterior se conserva'});
   function submit(e:React.FormEvent){
     e.preventDefault();setError('');
     try {

@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Brand />
         <NavLinks />
         <div className="mt-auto rounded-md border border-sidebar-border px-3 py-3 text-xs text-sidebar-muted">
-          Uso interno · Entorno de desarrollo
+          {import.meta.env['VITE_AGENDA_MODE'] === 'demo' ? 'Demostración · Datos de prueba' : 'Uso interno · Agenda Amauta'}
         </div>
       </aside>
 

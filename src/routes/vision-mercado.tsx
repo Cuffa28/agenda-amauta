@@ -13,7 +13,7 @@ export const Route=createFileRoute('/vision-mercado')({ssr:false,component:Marke
 function MarketPage(){
   const {data:view}=useSuspenseQuery(marketViewQuery());
   const [title,setTitle]=useState(''); const [summary,setSummary]=useState(''); const [body,setBody]=useState('');
-  const save=useRepoMutation((repo,input:MarketViewVersionInput)=>repo.publishMarketViewVersion(input),{success:'Versión guardada en Agenda'});
+  const save=useRepoMutation((repo,input:MarketViewVersionInput)=>repo.publishMarketViewVersion(input),{invalidate:['market-view'],success:'Versión guardada en Agenda'});
   return <><PageHeader title="Visión de mercado" description="Cada revisión conserva su versión; guardar una nueva no modifica las anteriores." />
     <SectionCard title="Nueva versión"><form className="grid gap-4" onSubmit={e=>{e.preventDefault();save.mutate({title,summary,body,author:'Amauta'});}}>
       <label>Título<Input value={title} onChange={e=>setTitle(e.target.value)} required minLength={3}/></label>

@@ -42,6 +42,7 @@ export function draftFingerprint({ client, advisor, position, review }: DraftSou
             cutoffDate: position.cutoffDate,
             items: position.items,
             declaredTotals: position.declaredTotals,
+            drivePdf: position.drivePdf,
           }
         : null,
       month: review.month,
@@ -62,7 +63,7 @@ export function needsRegeneration(
 export function generateEmailDraft({ client, advisor, position, review }: DraftSource) {
   const monthLabel = formatMonthLabel(review.month);
   const firstName = advisor.name.split(" ")[0];
-  const subject = `Revisión mensual ${monthLabel} · Cartera ${client.id}`;
+  const subject = `Revisión de cartera · ${client.name} (${client.id}) · ${monthLabel}`.slice(0, 200);
   const lines: string[] = [];
 
   lines.push(`Hola ${firstName},`, "");
@@ -87,6 +88,7 @@ export function generateEmailDraft({ client, advisor, position, review }: DraftS
         );
       }
     }
+    if (position.drivePdf) lines.push(`PDF original: https://drive.google.com/file/d/${position.drivePdf.fileId}/view`);
     lines.push("");
   } else {
     lines.push("No hay posición cargada para este período.", "");
@@ -128,3 +130,8 @@ export function generateEmailDraft({ client, advisor, position, review }: DraftS
   return { subject, body: lines.join("\n") };
 }
 
+
+/** Exportación explícita para que el usuario decida qué compartir en el chat. */
+export function draftForChat(source: DraftSource, draft: { subject: string; body: string }): string {
+  return `Cartera: ${source.client.id} · ${source.client.name}\nRevisión: ${source.review.id}\nPara: ${source.advisor.email}\nAsunto: ${draft.subject}\n\n${draft.body}`;
+}

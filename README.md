@@ -29,3 +29,13 @@ El ingreso principal usa el código enviado al correo existente del usuario (sig
 ## Google Workspace y seguimiento
 
 Ver GOOGLE_WORKSPACE.md para autorizar los servicios en el proyecto corporativo. La ficha incluye PDF en Drive, importador de posiciones Balanz para revisar, plan de rotación por moneda, historial de posiciones y avances de propuesta. Gmail conserva borradores editables; Calendar prepara bloques o seguimientos y crea eventos solo con confirmación. Las pruebas de API reales requieren completar la configuración y autorizar Google.
+
+
+## Flujo de revisión y borradores
+
+- La ficha carga sus consultas independientes en paralelo; posiciones, revisiones, pendientes y correos se filtran por cliente. La navegación reutiliza datos durante un minuto y actualiza en segundo plano cuando corresponde.
+- Iniciar revisión muestra progreso y abre el formulario con la respuesta persistida, sin esperar una recarga global. Reintentar recupera la revisión existente. Los inicios concurrentes usan un identificador estable por cliente y mes.
+- El borrador se prepara al abrir la revisión con el correo asignado al asesor. El asunto incluye cartera, identificador y mes. Los cambios guardados en la decisión marcan el texto como desactualizado hasta regenerarlo explícitamente.
+- «Copiar para este chat» copia destinatario, asunto y cuerpo editado. No envía ni crea un correo externo. El usuario lo pega en su chat y solicita la revisión o el envío. La cuenta conectada al chat es independiente de la conexión Google de Agenda.
+- «Guardar borrador en Gmail» conserva el consentimiento Google existente y requiere la configuración OAuth descrita en GOOGLE_WORKSPACE.md. La app no envía mensajes.
+- Los correos de asesores se guardan en agenda_clients, fuera del código público, y se pueden modificar desde Editar ficha.

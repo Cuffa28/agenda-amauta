@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSuspenseQuery } from '@tanstack/react-query';
+import { useSuspenseQueries } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { PageHeader, SectionCard } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,9 @@ import { followUpInputSchema, type FollowUpInput } from '@/domain/schemas';
 
 export const Route = createFileRoute('/seguimientos')({ ssr: false, component: FollowUps });
 function FollowUps() {
-  const { data: items } = useSuspenseQuery(followUpsQuery()); const { data: reviews } = useSuspenseQuery(reviewsQuery());
-  const { data: clients } = useSuspenseQuery(clientsQuery()); const { data: pendings } = useSuspenseQuery(pendingsQuery());
+  const [{ data: items }, { data: reviews }, { data: clients }, { data: pendings }] = useSuspenseQueries({
+    queries: [followUpsQuery(), reviewsQuery(), clientsQuery(), pendingsQuery()],
+  });
   const [kind, setKind] = useState<'seguimiento' | 'bloque'>('seguimiento'), [source, setSource] = useState(''), [selected, setSelected] = useState<string[]>([]);
   const [title, setTitle] = useState('Seguimiento de cartera'), [date, setDate] = useState(todayInBuenosAires()), [time, setTime] = useState('10:00'), [duration, setDuration] = useState(30), [error, setError] = useState('');
   const review = source.startsWith('r:') ? reviews.find(r => r.id === source.slice(2)) : undefined;
@@ -23,7 +24,7 @@ function FollowUps() {
   const link = kind === 'bloque' ? { kind: 'bloque', clientIds: selected } : pending ? { kind: 'pendiente', pendingId: pending.id } : { kind: review?.decision?.type === 'proponer_cambio' ? 'propuesta' : 'revision', reviewId: review?.id || '' };
   const valid = followUpInputSchema.safeParse({ clientId: kind === 'bloque' ? selected[0] || '' : pending?.clientId || review?.clientId || '', title, link, date, time, durationMinutes: duration });
   const preview = valid.success ? buildFollowUpPreview(valid.data) : null;
-  const save = useRepoMutation((repo, input: FollowUpInput) => repo.createFollowUp(input), { success: 'Preparación guardada. Revisá y confirmá el evento debajo.' });
+  const save = useRepoMutation((repo, input: FollowUpInput) => repo.createFollowUp(input), { invalidate: ['follow-ups'], success: 'Preparación guardada. Revisá y confirmá el evento debajo.' });
   const name = (id: string) => clients.find(c => c.id === id)?.name || id;
   return <><PageHeader title="Agenda y seguimientos" description="Reservá bloques para varias carteras o seguimientos de propuestas y pendientes."/>
     <GoogleConnection/>

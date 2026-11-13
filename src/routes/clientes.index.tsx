@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -38,10 +38,9 @@ function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes/" });
   const month = mes ?? currentMonthInBuenosAires();
   const today = todayInBuenosAires();
-  const { data: clients } = useSuspenseQuery(clientsQuery());
-  const { data: advisors } = useSuspenseQuery(advisorsQuery());
-  const { data: reviews } = useSuspenseQuery(reviewsQuery());
-  const { data: pendings } = useSuspenseQuery(pendingsQuery());
+  const [{ data: clients }, { data: advisors }, { data: reviews }, { data: pendings }] = useSuspenseQueries({
+    queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery()],
+  });
   const [q, setQ] = useState("");
   const [segment, setSegment] = useState(ALL);
   const [advisorId, setAdvisorId] = useState(ALL);

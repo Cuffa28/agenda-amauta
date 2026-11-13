@@ -85,12 +85,12 @@ export function createMemoryRepository(
 
     async savePosition(input) { const position = parseOrThrow(positionSchema, input); state.positions = [position, ...state.positions.filter(p => p.clientId !== position.clientId)]; return clone(position); },
 
-    async listPositions() {
-      return clone(state.positions);
+    async listPositions(clientId) {
+      return clone(state.positions.filter(row => !clientId || row.clientId === clientId));
     },
 
-    async listReviews() {
-      return clone(state.reviews);
+    async listReviews(clientId) {
+      return clone(state.reviews.filter(row => !clientId || row.clientId === clientId));
     },
 
     async startReview({ clientId, month }) {
@@ -131,6 +131,14 @@ export function createMemoryRepository(
       return clone(review);
     },
 
+    async setReviewPosition(reviewId, positionId) {
+      const review = findReview(reviewId);
+      if (review.status === 'cerrada') throw new RepositoryRuleError('La revisión ya está cerrada');
+      if (!state.positions.some(p => p.id === positionId && p.clientId === review.clientId)) throw new RepositoryRuleError('La posición no pertenece a esta cartera');
+      review.positionId = positionId;
+      return clone(review);
+    },
+
     async saveDecision(reviewId, decision) {
       const data = parseOrThrow(decisionSchema, decision);
       const review = findReview(reviewId);
@@ -165,8 +173,8 @@ export function createMemoryRepository(
       return clone(review);
     },
 
-    async listPendings() {
-      return clone(state.pendings);
+    async listPendings(clientId) {
+      return clone(state.pendings.filter(row => !clientId || row.clientId === clientId));
     },
 
     async createPending(input) {
@@ -215,8 +223,8 @@ export function createMemoryRepository(
       return clone(version);
     },
 
-    async listEmailDrafts() {
-      return clone(state.drafts);
+    async listEmailDrafts(clientId) {
+      return clone(state.drafts.filter(d => !clientId || state.reviews.some(r => r.id === d.reviewId && r.clientId === clientId)));
     },
 
     async saveEmailDraft(input) {

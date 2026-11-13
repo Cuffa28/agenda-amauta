@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQueries } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
@@ -43,10 +43,9 @@ function ResumenPage() {
   const navigate = useNavigate({ from: "/" });
   const month = mes ?? currentMonthInBuenosAires();
   const today = todayInBuenosAires();
-  const { data: clients } = useSuspenseQuery(clientsQuery());
-  const { data: advisors } = useSuspenseQuery(advisorsQuery());
-  const { data: reviews } = useSuspenseQuery(reviewsQuery());
-  const { data: pendings } = useSuspenseQuery(pendingsQuery());
+  const [{ data: clients }, { data: advisors }, { data: reviews }, { data: pendings }] = useSuspenseQueries({
+    queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery()],
+  });
   const [showAllPendings, setShowAllPendings] = useState(false);
 
   const summary = useMemo(

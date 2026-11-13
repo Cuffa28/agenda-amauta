@@ -1,4 +1,6 @@
-import { Lock, PlayCircle } from "lucide-react";
+import { Lock, PlayCircle, LoaderCircle } from "lucide-react";
+import { useQueryClient } from '@tanstack/react-query';
+import { cacheSavedReview } from '@/data/review-cache';
 import { useState } from "react";
 
 import { Field } from "@/components/Field";
@@ -25,6 +27,7 @@ import {
   type DecisionType,
   type MarketViewSnapshot,
   type Review,
+  type Position,
 } from "@/domain/schemas";
 
 export function ReviewPanel({
@@ -32,16 +35,24 @@ export function ReviewPanel({
   month,
   status,
   marketView,
+  position = null,
 }: {
   clientId: string;
   month: string;
   status: PortfolioMonthStatus;
   marketView: MarketView;
+  position?: Position | null;
 }) {
   const review = status.review;
+  const queryClient = useQueryClient();
   const latest = marketView.versions[0];
+  const attachPosition = useRepoMutation((repo, id: string) => repo.setReviewPosition(review!.id, id), {
+    success: 'Posición vinculada a la revisión', invalidate: [], onSuccess: saved => cacheSavedReview(queryClient, saved),
+  });
   const start = useRepoMutation((repo, _: void) => repo.startReview({ clientId, month }), {
     success: "Revisión iniciada",
+    invalidate: [],
+    onSuccess: saved => cacheSavedReview(queryClient, saved),
   });
 
   if (!review) {
@@ -51,14 +62,15 @@ export function ReviewPanel({
         actions={<PortfolioStatusBadge status={status.status} overdue={status.isOverdue} />}
       >
         <p className="text-sm text-muted-foreground">
-          Sin iniciar. Vence el <span className="font-mono">{formatDate(status.dueDate)}</span>. Al
-          iniciar se congela la versión vigente de la visión de mercado
-          {latest ? <> (v{latest.version} · {latest.title})</> : <> cuando haya una publicada; esta revisión podrá continuar sin una visión asociada</>}.
+          {status.dueDate ? `Vence el ${formatDate(status.dueDate)}.` : 'Podés empezar aunque todavía no tenga un día mensual asignado.'}
+          {' '}Registrá tu decisión, prepará el correo y agendá lo que quede pendiente.
+          {latest && <> Se conservará tu visión de mercado v{latest.version}.</>}
         </p>
         <Button className="mt-4" onClick={() => start.mutate()} disabled={start.isPending}>
-          <PlayCircle />
-          Iniciar revisión
+          {start.isPending ? <LoaderCircle className="animate-spin" /> : <PlayCircle />}
+          {start.isPending ? 'Iniciando…' : 'Iniciar revisión'}
         </Button>
+        {start.error && <p role="alert" className="mt-3 text-sm text-destructive">{start.error.message} Podés volver a intentar sin duplicar la revisión.</p>}
       </SectionCard>
     );
   }
@@ -69,11 +81,15 @@ export function ReviewPanel({
       description={
         review.status === "cerrada" && review.closedAt
           ? `Cerrada el ${formatDateTime(review.closedAt)} · vencimiento ${formatDate(status.dueDate)}`
-          : `En curso · vencimiento ${formatDate(status.dueDate)}`
+          : `En curso${status.dueDate ? ` · vence ${formatDate(status.dueDate)}` : ' · sin fecha mensual asignada'}`
       }
       actions={<PortfolioStatusBadge status={status.status} overdue={status.isOverdue} />}
     >
       <SnapshotBox snapshot={review.marketViewSnapshot} latestVersion={latest?.version} />
+      {review.status !== 'cerrada' && position && position.id !== review.positionId && <div className="mt-4 rounded border p-3 text-sm">
+        <p>Hay una posición al {formatDate(position.cutoffDate)} disponible. Confirmá si querés usarla en esta revisión y en su borrador.</p>
+        <Button className="mt-2" variant="outline" disabled={attachPosition.isPending} onClick={() => attachPosition.mutate(position.id)}>{attachPosition.isPending ? 'Vinculando…' : 'Usar esta posición en la revisión'}</Button>
+      </div>}
       <div className="mt-5">
         {review.status === "cerrada" && review.decision ? (
           <DecisionSummary decision={review.decision} />
@@ -190,17 +206,18 @@ function toDecision(s: FormState): unknown {
 }
 
 function DecisionForm({ review }: { review: Review }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<FormState>(() => initialState(review.decision));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = <K extends keyof FormState>(key: K) => (value: FormState[K]) => setState((s) => ({ ...s, [key]: value }));
 
-  const save = useRepoMutation((repo, d: Decision) => repo.saveDecision(review.id, d), { success: "Decisión guardada" });
+  const save = useRepoMutation((repo, d: Decision) => repo.saveDecision(review.id, d), { success: "Decisión guardada", invalidate: [], onSuccess: saved => cacheSavedReview(queryClient, saved) });
   const close = useRepoMutation(
     async (repo, d: Decision) => {
       await repo.saveDecision(review.id, d);
       return repo.closeReview(review.id);
     },
-    { success: "Revisión cerrada: la cartera cuenta como revisada" },
+    { success: "Revisión cerrada: la cartera cuenta como revisada", invalidate: ['pendings'], onSuccess: saved => cacheSavedReview(queryClient, saved) },
   );
 
   const validate = (): Decision | null => {
@@ -290,10 +307,10 @@ function DecisionForm({ review }: { review: Review }) {
 
       <div className="flex flex-wrap gap-2 border-t pt-4">
         <Button variant="outline" disabled={busy} onClick={() => { const d = validate(); if (d) save.mutate(d); }}>
-          Guardar decisión
+          {save.isPending ? 'Guardando…' : 'Guardar decisión'}
         </Button>
         <Button disabled={busy} onClick={() => { const d = validate(); if (d) close.mutate(d); }}>
-          Cerrar revisión
+          {close.isPending ? 'Cerrando…' : 'Cerrar revisión'}
         </Button>
       </div>
     </div>

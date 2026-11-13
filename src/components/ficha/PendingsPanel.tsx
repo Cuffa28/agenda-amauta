@@ -35,7 +35,7 @@ export function PendingsPanel({
   const open = pendings.filter((p) => p.status === "abierto").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const resolved = pendings.filter((p) => p.status === "resuelto").sort((a, b) => b.dueDate.localeCompare(a.dueDate));
   const [showResolved, setShowResolved] = useState(false);
-  const resolve = useRepoMutation((repo, id: string) => repo.resolvePending(id), { success: "Pendiente resuelto" });
+  const resolve = useRepoMutation((repo, id: string) => repo.resolvePending(id), { invalidate: ["pendings"], success: "Pendiente resuelto" });
 
   return (
     <SectionCard title="Pendientes" description={`${open.length} abiertos`}>
@@ -95,7 +95,7 @@ function NewPendingForm({ clientId, review, today }: { clientId: string; review:
   const [origin, setOrigin] = useState<PendingInput["origin"]>("manual");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const create = useRepoMutation((repo, input: PendingInput) => repo.createPending(input), {
-    success: "Pendiente registrado",
+    invalidate: ["pendings"], success: "Pendiente registrado",
     onSuccess: () => {
       setDescription("");
       setOpenForm(false);

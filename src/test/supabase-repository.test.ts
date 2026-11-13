@@ -171,6 +171,10 @@ describe('Adaptador de datos reales',()=>{
     expect(d.tables['agenda_positions']).toHaveLength(2);
     const again = await repo.removePositionPdf(position.id, position.clientId);
     expect(again.drivePdf).toBeNull();
+    expect((await repo.listPositionHistory(position.clientId))[0]?.drivePdf).toBeNull();
+    expect((await repo.listPositions(position.clientId))[0]?.drivePdf).toBeNull();
+    expect(d.tables['agenda_positions']![0].drive_url).toContain('pdfOriginal12345');
+    expect(d.tables['agenda_drafts']!.filter(row => row.source_snapshot?.kind === 'position_pdf_removed')).toHaveLength(1);
   });
 
 });

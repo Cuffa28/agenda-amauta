@@ -99,6 +99,7 @@ export function createMemoryRepository(
       review.analysis = parsed.analysis;
       return clone(review);
     },
+    async listPositionHistory(clientId) { return clone(state.positions.filter(p => p.clientId === clientId)); },
     async listPositions(clientId) {
       return clone(state.positions.filter(row => !clientId || row.clientId === clientId));
     },

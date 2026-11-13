@@ -2,8 +2,7 @@ import { PersonalReviewSchedule } from '@/components/ficha/PersonalReviewSchedul
 import { useState } from 'react';
 import { useQuery, useSuspenseQueries } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { requireAgendaSession } from '@/data/supabase/client';
-import { mapPosition } from '@/data/supabase/mappers';
+import { getRepository } from '@/data';
 import { describeDecision } from '@/domain/decision';
 import { RotationPanel } from '@/components/ficha/RotationPanel';
 import { PositionHistory } from '@/components/ficha/PositionHistory';
@@ -29,7 +28,7 @@ function ClientPage() {
   const client = clients.find(c => c.id === clientId), position = positions.find(p => p.clientId === clientId) ?? null;
   const review = reviews.find(r => r.clientId === clientId && r.month === month) ?? null;
   const historical = useQuery({ queryKey: ['review-position', review?.positionId], enabled: !!review?.positionId && review.positionId !== position?.id,
-    queryFn: async () => { const { supabase } = await requireAgendaSession(); const { data, error } = await supabase.from('agenda_positions').select('*').eq('id', review!.positionId!).eq('client_id', clientId).single(); if (error) throw error; return mapPosition(data); } });
+    queryFn: async () => { const positions = await getRepository().listPositionHistory(clientId); const found = positions.find(p => p.id === review!.positionId); if (!found) throw Error('Posición no encontrada.'); return found; } });
   if (!client) return <p>Cliente no encontrado.</p>;
   const advisor = advisors.find(a => a.id === client.advisorId), status = portfolioMonthStatus(client, month, reviews, pendings, todayInBuenosAires());
   const reviewPosition = review?.positionId === position?.id ? position : historical.data || null;

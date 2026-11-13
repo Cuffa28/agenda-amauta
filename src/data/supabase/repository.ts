@@ -31,6 +31,13 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     const row = await insert('agenda_tasks', { client_id: p.clientId, review_id: review.status === 'cerrada' ? review.id : null, title: p.description, due_at: `${p.dueDate}T12:00:00-03:00`, notes: JSON.stringify({ kind: 'pending', origin: p.origin, reviewId: p.reviewId }) });
     return { ...p, id: row['id'], status: 'abierto' as const, createdAt: row['created_at'], resolvedAt: null };
   };
+  // Las posiciones son inmutables. El retiro del adjunto se registra aparte, sin ampliar permisos.
+  const positionHistory = async (clientId?: string): Promise<Position[]> => {
+    const [all, removed] = await Promise.all([rows('agenda_positions', clientId), rows('agenda_drafts', clientId, 'position_pdf_removed')]);
+    const ids = new Set(removed.map(row => row['source_snapshot'].positionId));
+    return all.sort((a,b) => b['as_of'].localeCompare(a['as_of']) || b['created_at'].localeCompare(a['created_at']))
+      .map(row => { const position = mapPosition(row); return ids.has(position.id) ? { ...position, drivePdf: null } : position; });
+  };
   return {
     mode: 'supabase',
     async listAdvisors() { return mapAdvisors(await rows('agenda_clients')); },
@@ -40,17 +47,18 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const advisor = advisors.find(a => a['id'] === p.advisorId); if (!advisor) throw new RepositoryRuleError('Asesor no encontrado.');
       return mapClient(await update('agenda_clients', id, { name: p.name, segment: p.segment, sector: p.sector || null, advisor_name: p.advisorName !== undefined ? p.advisorName || null : advisor.id === 'unassigned' ? null : advisor.name, advisor_email: p.advisorEmail !== undefined ? p.advisorEmail || null : advisor.email || null, ...(p.reviewDay !== undefined ? { review_day: p.reviewDay || null } : {}) }, p.expectedUpdatedAt || old['updated_at']));
     },
-    async listPositions(clientId) { const all = (await rows('agenda_positions', clientId)).sort((a,b) => b['as_of'].localeCompare(a['as_of']) || b['created_at'].localeCompare(a['created_at'])); return [...new Map(all.reverse().map(r => [r['client_id'], mapPosition(r)])).values()]; },
+    async listPositions(clientId) { const all = await positionHistory(clientId); return [...new Map([...all].reverse().map(p => [p.clientId, p])).values()]; },
+    listPositionHistory: positionHistory,
     async savePosition(input) { const p = parseOrThrow(positionSchema, input); const r = await insert('agenda_positions', { client_id: p.clientId, broker: p.alyc, as_of: p.cutoffDate, drive_url: p.drivePdf ? `https://drive.google.com/file/d/${p.drivePdf.fileId}/view` : null, summary: JSON.stringify({schema:'agenda-position-v1',fileName:p.drivePdf?.fileName||'',sourceNote:p.sourceNote||''}), details: p.items, totals: p.declaredTotals, status: 'manual' }); return mapPosition(r); },
     async removePositionPdf(positionId, clientId) {
       const { data: old, error } = await db().from('agenda_positions').select('*').eq('id', positionId).eq('client_id', clientId).single();
       if (error) throw error;
       if (!old) throw new RepositoryRuleError('Posición no encontrada en esta cartera.');
-      const metadata = decode(old['summary']);
-      return mapPosition(await update('agenda_positions', positionId, {
-        drive_url: null,
-        summary: JSON.stringify({ ...metadata, schema: 'agenda-position-v1', fileName: '', pdfRemovedAt: new Date().toISOString() }),
-      }, old['updated_at']));
+      const id = await stableUuid(`agenda-position-pdf-removed:${clientId}:${positionId}`);
+      try {
+        await insert('agenda_drafts', { id, client_id: clientId, subject: 'PDF retirado de la ficha', body: '', source_snapshot: { kind: 'position_pdf_removed', positionId, removedAt: new Date().toISOString() } });
+      } catch (error) { if ((error as { code?: string }).code !== '23505') throw error; }
+      return { ...mapPosition(old), drivePdf: null };
     },
     async saveReviewAnalysis(id, analysis) {
       const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;

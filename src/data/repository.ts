@@ -39,6 +39,7 @@ export interface AgendaRepository {
   /** Última posición conocida de cada cliente. */
   listPositions(clientId?: string): Promise<Position[]>;
   savePosition(input: Position): Promise<Position>;
+  listPositionHistory(clientId: string): Promise<Position[]>;
   removePositionPdf(positionId: string, clientId: string): Promise<Position>;
   listReviews(clientId?: string): Promise<Review[]>;
   /** Crea la revisión del mes y congela la versión vigente de la visión de mercado. */

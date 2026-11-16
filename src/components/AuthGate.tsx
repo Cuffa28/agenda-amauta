@@ -21,6 +21,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false), [allowed, setAllowed] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [busy, setBusy] = useState(false);
+  const [accessAttempt, setAccessAttempt] = useState(0);
+  const [checkingAccess, setCheckingAccess] = useState(false);
   const [code, setCode] = useState(''), [sentTo, setSentTo] = useState(''), [usePassword, setUsePassword] = useState(false);
   const demo = import.meta.env['VITE_AGENDA_MODE'] === 'demo';
   const googleEnabled = import.meta.env['VITE_GOOGLE_AUTH_ENABLED'] === 'true';
@@ -56,18 +58,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
     // Revalidar la misma cuenta en segundo plano conserva el formulario abierto.
     if (authorizedUserId.current !== session.user.id) setAllowed(false);
     let active = true;
+    setCheckingAccess(true);
     void requireAgendaSession().then(() => {
-      if (active) { authorizedUserId.current = session.user.id; setAllowed(true); setError(''); }
-    }).catch(e => { if (active) { authorizedUserId.current = null; queryClient.clear(); setAllowed(false); setError(loginError(e)); } });
+      if (active) { authorizedUserId.current = session.user.id; setAllowed(true); setError(''); setCheckingAccess(false); }
+    }).catch(e => { if (active) { authorizedUserId.current = null; queryClient.clear(); setAllowed(false); setError(loginError(e)); setCheckingAccess(false); } });
     return () => { active = false; };
-  }, [session, queryClient]);
+  }, [session, queryClient, accessAttempt]);
 
   async function login(method: 'google' | 'email' | 'password' | 'verify') {
     setBusy(true); setError(''); setNotice('');
     try {
       const sb = getSupabase();
       if (method === 'google') {
-        const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account' } } });
+        const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account', hd: 'amautainversiones.com' } } });
         if (error) throw error;
       } else if (method === 'verify') {
         const { data, error } = await sb.auth.verifyOtp({ email: sentTo, token: code.replace(/\s/g, ''), type: 'email' });
@@ -92,7 +95,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return <div className="login-page"><aside className="login-story"><AmautaBrand dark/><div className="login-story-copy"><span>Agenda Amauta</span><h2>Tu criterio.<br/>Una mirada<br/><em>propia.</em></h2><p>El espacio para pensar cada cartera, documentar decisiones y acompañar lo que sigue.</p></div><div className="login-story-footer"><span>FACUNDO ARGAÑARAZ</span><span>AMAUTA INVERSIONES</span></div></aside><div className="login-form-panel"><section className="login-card space-y-5"><div className="login-eyebrow">TU ESPACIO DE TRABAJO</div>
     <h1>Entrá a tu agenda.</h1>
     <p className="text-sm text-muted-foreground">Ingresá con tu cuenta autorizada de Amauta.</p>
-    {!loaded ? <p>Comprobando sesión…</p> : session && !error ? <p role="status">Comprobando acceso…</p> : <>
+    {!loaded ? <p>Comprobando sesión…</p> : session && checkingAccess ? <p role="status">Recuperando tu acceso…</p> : session ? <div className="space-y-3"><p className="text-sm">Hay una sesión guardada para <strong>{session.user.email}</strong>. No hace falta pedir otro código para volver a comprobar el acceso.</p><Button className="w-full" onClick={() => { setError(''); setAccessAttempt(value => value + 1); }}>Reintentar con mi sesión guardada</Button><Button className="w-full" variant="ghost" onClick={() => void getSupabase().auth.signOut()}>Ingresar con otra cuenta</Button></div> : <>
+      {googleEnabled && <Button className="w-full" disabled={busy} onClick={() => void login('google')}>Ingresar con Google</Button>}
       <form className="space-y-3" onSubmit={e => { e.preventDefault(); void login(usePassword ? 'password' : sentTo ? 'verify' : 'email'); }}>
         <label className="text-sm" htmlFor="login-email">Correo</label>
         <Input id="login-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" disabled={busy || !!sentTo}/>
@@ -111,10 +115,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setSentTo(''); setCode(''); setNotice(''); setError(''); }}>Cambiar correo</Button>
       </div>}
       {!sentTo && <Button className="w-full" variant="ghost" disabled={busy} onClick={() => { setUsePassword(!usePassword); setPassword(''); setNotice(''); setError(''); }}>{usePassword ? 'Ingresar con un código por correo' : 'Ya tengo contraseña'}</Button>}
-      {googleEnabled && <Button className="w-full" variant="outline" disabled={busy} onClick={() => void login('google')}>Ingresar con Google</Button>}
       {session && <Button variant="ghost" onClick={() => void getSupabase().auth.signOut()}>Cambiar cuenta</Button>}
     </>}
     {error && <p role="alert" className="text-sm">{error}</p>}
     {notice && <p role="status" className="text-sm">{notice}</p>}
-  <div className="login-privacy">Acceso privado para las cuentas autorizadas de Agenda Amauta.</div></section></div></div>;
+  <div className="login-privacy">Tu sesión se conserva en este navegador. Usá siempre agenda-amauta.vercel.app y cerrá sesión sólo cuando quieras salir de tu cuenta.</div></section></div></div>;
 }

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthGate } from '@/components/AuthGate';
 
-const api = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn(), signInWithPassword: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), requireSession: vi.fn() }));
+const api = vi.hoisted(() => ({ getSession: vi.fn(), onAuthStateChange: vi.fn(), signInWithOAuth: vi.fn(), signInWithPassword: vi.fn(), signInWithOtp: vi.fn(), verifyOtp: vi.fn(), requireSession: vi.fn() }));
 vi.mock('@/data/supabase/client', () => ({ getSupabase: () => ({ auth: api }), requireAgendaSession: () => api.requireSession() }));
 const session = { user: { id: 'test-user', email: 'advisor@example.com' } };
 function mount() {
@@ -13,6 +13,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_AGENDA_MODE', ''); vi.stubEnv('VITE_GOOGLE_AUTH_ENABLED', 'false'); vi.stubEnv('VITE_EMAIL_LINK_ENABLED', 'false');
   api.getSession.mockResolvedValue({ data: { session: null }, error: null });
   api.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+  api.signInWithOAuth.mockResolvedValue({data:{},error:null});
   api.signInWithPassword.mockResolvedValue({ data: { session }, error: null });
   api.signInWithOtp.mockResolvedValue({ data: {}, error: null });
   api.verifyOtp.mockResolvedValue({ data: { session }, error: null });
@@ -122,6 +123,25 @@ describe('Acceso a Agenda', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Acceso revocado');
     expect(screen.queryByText('Ficha privada')).not.toBeInTheDocument();
     expect(client.getQueryData(['reviews'])).toBeUndefined();
+  });
+
+  it('reintenta validar la sesión guardada tras un fallo sin pedir ni enviar otro código', async () => {
+    api.getSession.mockResolvedValue({ data: { session }, error: null });
+    api.requireSession.mockRejectedValueOnce(new Error('No se pudo conectar')).mockResolvedValue({ user: session.user });
+    mount();
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo conectar');
+    expect(screen.queryByRole('button', {name:'Recibir código de acceso'})).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name:'Reintentar con mi sesión guardada'}));
+    expect(await screen.findByText('Ficha privada')).toBeInTheDocument();
+    expect(api.signInWithOtp).not.toHaveBeenCalled();
+  });
+  it('inicia Google sin exigir correo ni código y mantiene la autorización pendiente', async () => {
+    vi.stubEnv('VITE_GOOGLE_AUTH_ENABLED', 'true');
+    mount();
+    fireEvent.click(await screen.findByRole('button', {name:'Ingresar con Google'}));
+    await waitFor(() => expect(api.signInWithOAuth).toHaveBeenCalledWith({provider:'google',options:{redirectTo:window.location.origin,queryParams:{prompt:'select_account',hd:'amautainversiones.com'}}}));
+    expect(api.signInWithOtp).not.toHaveBeenCalled();
+    expect(screen.queryByText('Ficha privada')).not.toBeInTheDocument();
   });
 
 });

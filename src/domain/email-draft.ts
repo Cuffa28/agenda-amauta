@@ -103,11 +103,11 @@ export function generateEmailDraft({ client, advisor, position, review }: DraftS
       lines.push(d.nota);
     } else if (d.type === "proponer_cambio") {
       lines.push(
-        `Propuesta: ${d.propuesta}`,
+        d.propuesta ? `Propuesta: ${d.propuesta}` : "Cambio recomendado; detalle pendiente de completar.",
         `Qué te pido validar: ${d.queValidar || "Confirmar horizonte, liquidez y restricciones del cliente"}`,
-        `Fundamento de horizonte: ${d.fundamentoHorizonte}`,
-        `Fundamento de liquidez: ${d.fundamentoLiquidez}`,
-        `Dato que nos haría reconsiderar: ${d.datoReconsiderar}`,
+        ...(d.fundamentoHorizonte ? [`Fundamento de horizonte: ${d.fundamentoHorizonte}`] : []),
+        ...(d.fundamentoLiquidez ? [`Fundamento de liquidez: ${d.fundamentoLiquidez}`] : []),
+        ...(d.datoReconsiderar ? [`Dato que nos haría reconsiderar: ${d.datoReconsiderar}`] : []),
         `Estado de validación: ${ADVISOR_VALIDATION_LABELS[d.validacionAsesor]}.`,
       );
     } else {

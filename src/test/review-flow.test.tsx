@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ReviewPanel } from '@/components/ficha/ReviewPanel';
+import { DetailedReviewPanel as ReviewPanel } from '@/components/ficha/ReviewPanel';
 import { EmailDraftPanel } from '@/components/ficha/EmailDraftPanel';
 import { reviewsQuery } from '@/data/queries';
 import { portfolioMonthStatus } from '@/domain/coverage';

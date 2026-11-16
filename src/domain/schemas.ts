@@ -99,16 +99,16 @@ export type AdvisorValidation = (typeof ADVISOR_VALIDATIONS)[number];
 
 export const keepDecisionSchema = z.object({
   type: z.literal("mantener"),
-  nota: text("Nota", 3, 280),
+  nota: text("Nota", 0, 280),
 });
 export const changeDecisionSchema = z.object({
   type: z.literal("proponer_cambio"),
-  propuesta: text("Propuesta", 10, 2000),
+  propuesta: text("Propuesta", 0, 2000),
   queValidar: text("Qué debe validar el asesor", 5, 1000).optional(),
-  fundamentoHorizonte: text("Fundamento de horizonte", 5, 1000),
-  fundamentoLiquidez: text("Fundamento de liquidez", 5, 1000),
+  fundamentoHorizonte: text("Fundamento de horizonte", 0, 1000),
+  fundamentoLiquidez: text("Fundamento de liquidez", 0, 1000),
   validacionAsesor: z.enum(ADVISOR_VALIDATIONS),
-  datoReconsiderar: text("Dato para reconsiderar", 3, 500),
+  datoReconsiderar: text("Dato para reconsiderar", 0, 500),
 });
 export const missingInfoDecisionSchema = z.object({
   type: z.literal("falta_informacion"),

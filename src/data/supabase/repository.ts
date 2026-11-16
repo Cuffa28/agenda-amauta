@@ -1,3 +1,4 @@
+import {clientContextSchema,clientNoteSchema,emptyContext} from '@/domain/client-notebook';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describeDecision } from '@/domain/decision';
 import { stableUuid } from '@/domain/ids';
@@ -28,7 +29,7 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
   const pendings = async (clientId?: string): Promise<PendingItem[]> => (await rows('agenda_tasks', clientId)).filter(r => decode(r['notes'])['kind'] !== 'followup').map(r => { const m = decode(r['notes']); return { id: r['id'], clientId: r['client_id'], reviewId: r['review_id'] || m['reviewId'] || '', origin: m['origin'] || 'manual', description: r['title'], dueDate: r['due_at'].slice(0,10), status: r['status'] === 'open' ? 'abierto' : 'resuelto', createdAt: r['created_at'], resolvedAt: r['completed_at'] }; });
   const createPending = async (input: Parameters<AgendaRepository['createPending']>[0]) => {
     const p = parseOrThrow(pendingInputSchema, input), review = await findReview(p.reviewId); if (review.clientId !== p.clientId) throw new RepositoryRuleError('La revisión no pertenece a ese cliente.');
-    const row = await insert('agenda_tasks', { client_id: p.clientId, review_id: review.status === 'cerrada' ? review.id : null, title: p.description, due_at: `${p.dueDate}T12:00:00-03:00`, notes: JSON.stringify({ kind: 'pending', origin: p.origin, reviewId: p.reviewId }) });
+    const row = await insert('agenda_tasks', { client_id: p.clientId, review_id: (await rows('agenda_reviews',review.clientId)).some(r=>r['id']===review.id) ? review.id : null, title: p.description, due_at: `${p.dueDate}T12:00:00-03:00`, notes: JSON.stringify({ kind: 'pending', origin: p.origin, reviewId: p.reviewId }) });
     return { ...p, id: row['id'], status: 'abierto' as const, createdAt: row['created_at'], resolvedAt: null };
   };
   // Las posiciones son inmutables. El retiro del adjunto se registra aparte, sin ampliar permisos.
@@ -40,6 +41,25 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
   };
   return {
     mode: 'supabase',
+    async getClientNotebook(clientId) {
+      const all = await rows('agenda_drafts', clientId);
+      const context = all.find(r=>r['source_snapshot']?.kind==='client_context');
+      return {context:context ? parseOrThrow(clientContextSchema,context['source_snapshot'].context) : {...emptyContext}, updatedAt:context?.['updated_at'], notes:all.filter(r=>r['source_snapshot']?.kind==='client_note').map(r=>({id:r['id'],...parseOrThrow(clientNoteSchema,r['source_snapshot'].note),at:r['created_at']})).sort((a,b)=>b.at.localeCompare(a.at))};
+    },
+    async saveClientContext(clientId, input, expectedUpdatedAt) {
+      const context = parseOrThrow(clientContextSchema,input);
+      const old = (await rows('agenda_drafts',clientId,'client_context'))[0];
+      if(old && old['updated_at']!==expectedUpdatedAt) throw new RepositoryRuleError('El contexto cambió en otra sesión. Recargá antes de guardar.');
+      const payload={client_id:clientId,subject:'Contexto del cliente',body:'',source_snapshot:{kind:'client_context',context}};
+      if(old) await update('agenda_drafts',old['id'],payload,expectedUpdatedAt);
+      else await insert('agenda_drafts',{...payload,id:await stableUuid('agenda-client-context:'+clientId)});
+      return this.getClientNotebook(clientId);
+    },
+    async addClientNote(clientId,input) {
+      const note=parseOrThrow(clientNoteSchema,input);
+      const row=await insert('agenda_drafts',{client_id:clientId,subject:'Nota interna del cliente',body:note.body,source_snapshot:{kind:'client_note',note}});
+      return {...note,id:row['id'],at:row['created_at']};
+    },
     async listAdvisors() { return mapAdvisors(await rows('agenda_clients')); },
     async listClients() { return (await rows('agenda_clients')).filter(r => r['active']).map(mapClient); },
     async updateClient(id, patch) {
@@ -62,7 +82,7 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     },
     async saveReviewAnalysis(id, analysis) {
       const w = await findWorkspace(id), review = w['source_snapshot'].review as Review;
-      if ((await rows('agenda_reviews', review.clientId)).some(r => r['id'] === id)) throw new RepositoryRuleError('La revisión ya está cerrada.');
+      if (review.status === 'cerrada' || (await rows('agenda_reviews', review.clientId)).some(r => r['id'] === id)) throw new RepositoryRuleError('La revisión ya está cerrada.');
       const parsed = parseOrThrow(reviewSchema, { ...review, analysis });
       return saveWorkspace(w, parsed);
     },
@@ -104,16 +124,21 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       ]);
       if (closed.error) throw closed.error;
       if (position.error) throw position.error;
-      if (closed.data) throw new RepositoryRuleError('La revisión ya está cerrada.');
+      if (review.status === 'cerrada' || closed.data) throw new RepositoryRuleError('La revisión ya está cerrada.');
       if (!position.data) throw new RepositoryRuleError('La posición no pertenece a esta cartera.');
       return saveWorkspace(w, { ...review, positionId });
     },
-    async saveDecision(id, decision) { const w = await findWorkspace(id), review = w['source_snapshot'].review as Review; if ((await rows('agenda_reviews')).some(r => r['id'] === id)) throw new RepositoryRuleError('La revisión ya está cerrada.'); return saveWorkspace(w, { ...review, decision: parseOrThrow(decisionSchema, decision) }); },
+    async saveDecision(id, decision) { const w = await findWorkspace(id), review = w['source_snapshot'].review as Review; if (review.status === 'cerrada' || (await rows('agenda_reviews')).some(r => r['id'] === id)) throw new RepositoryRuleError('La revisión ya está cerrada.'); return saveWorkspace(w, { ...review, decision: parseOrThrow(decisionSchema, decision) }); },
     async closeReview(id) {
       const existing = (await allReviews()).find(r => r['id'] === id && r['status'] === 'cerrada'); if (existing) return existing;
       const w = await findWorkspace(id), r = w['source_snapshot'].review as Review; if (!r['decision']) throw new RepositoryRuleError('Guardá la decisión antes de cerrar.'); const d = parseOrThrow(decisionSchema, r['decision']);
       // Se crea el pendiente antes del cierre; un reintento no lo duplica.
       if (d['type'] === 'falta_informacion' && !(await pendings()).some(p => p.reviewId === id && p.origin === 'falta_informacion')) await createPending({ clientId: r['clientId'], reviewId: id, origin: 'falta_informacion', description: d['informacionFaltante'], dueDate: d['fechaLimite'] });
+      // El registro clásico exige fundamentos completos. Una revisión rápida se
+      // conserva en su espacio privado existente, con estado y fecha de cierre,
+      // sin inventar contenido para satisfacer esas restricciones históricas.
+      const quick = d.type === 'mantener' ? !d.nota : d.type === 'proponer_cambio' && (!d.propuesta || !(d.fundamentoHorizonte+d.fundamentoLiquidez).trim() || !d.datoReconsiderar);
+      if(quick) return saveWorkspace(w,{...r,decision:d,status:'cerrada',closedAt:new Date().toISOString()});
       const decision = d['type'] === 'mantener' ? 'maintain' : d['type'] === 'proponer_cambio' ? 'propose' : 'missing_info';
       await insert('agenda_reviews', { id, client_id: r['clientId'], period: r['month'] + '-01', position_id: r['positionId'], decision, note: d['type'] === 'mantener' ? d['nota'] : d['type'] === 'falta_informacion' ? d['informacionFaltante'] : '', proposed_change: d['type'] === 'proponer_cambio' ? d['propuesta'] : null, horizon_liquidity_reason: d['type'] === 'proponer_cambio' ? `${d['fundamentoHorizonte']}\n${d['fundamentoLiquidez']}` : null, advisor_validation: d['type'] === 'proponer_cambio' ? d['validacionAsesor'] : null, reconsider_if: d['type'] === 'proponer_cambio' ? d['datoReconsiderar'] : null, market_version_id: r['marketViewSnapshot']?.versionId || null, conclusion: JSON.stringify({ schema: 'agenda-review-v1', decision: d, analysis: r['analysis'] || '', previousConclusion: r['previousConclusion'], startedAt: r['startedAt'] }) });
       return findReview(id);
@@ -123,7 +148,7 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     getMarketView: market,
     async publishMarketViewVersion(input) { const p = parseOrThrow(marketViewVersionInputSchema,input); const { user } = await requireAgendaSession(); const row = await insert('agenda_market_versions',{title:p.title,body:JSON.stringify({schema:'agenda-market-v1',summary:p.summary,body:p.body,author:user.email}),as_of:new Date().toLocaleDateString('en-CA',{timeZone:BA_TZ})}); return (await market()).versions.find(v=>v.id===row['id'])!; },
     async listEmailDrafts(clientId): Promise<EmailDraft[]> { return (await rows('agenda_drafts', clientId, 'email_draft')).map(r=>({...r['source_snapshot'].input,updatedAt:r['updated_at'],gmailDraftId:r['gmail_draft_id']||undefined,googleAccount:r['source_snapshot']?.google?.account})); },
-    async saveEmailDraft(input) { const p = parseOrThrow(emailDraftInputSchema,input),review=await findReview(p.reviewId),c=await findClient(review.clientId); if(!c['advisor_email'])throw new RepositoryRuleError('Asigná el correo del asesor.');const old=(await rows('agenda_drafts')).filter(d=>d['source_snapshot']?.kind==='email_draft'&&d['source_snapshot'].input?.reviewId===p.reviewId).sort((a,b)=>b['updated_at'].localeCompare(a['updated_at']))[0];const payload={client_id:review.clientId,review_id:review.status==='cerrada'?review.id:null,recipient:c['advisor_email'],subject:p.subject,body:p.body,source_snapshot:{kind:'email_draft',input:p,...(old?.['source_snapshot']?.google?{google:old['source_snapshot'].google}:{})}};const row=old?await update('agenda_drafts',old['id'],payload,old['updated_at']):await insert('agenda_drafts',payload);return {...p,updatedAt:row['updated_at']}; },
+    async saveEmailDraft(input) { const p = parseOrThrow(emailDraftInputSchema,input),review=await findReview(p.reviewId),c=await findClient(review.clientId); if(!c['advisor_email'])throw new RepositoryRuleError('Asigná el correo del asesor.');const old=(await rows('agenda_drafts')).filter(d=>d['source_snapshot']?.kind==='email_draft'&&d['source_snapshot'].input?.reviewId===p.reviewId).sort((a,b)=>b['updated_at'].localeCompare(a['updated_at']))[0];const payload={client_id:review.clientId,review_id:(await rows('agenda_reviews',review.clientId)).some(r=>r['id']===review.id)?review.id:null,recipient:c['advisor_email'],subject:p.subject,body:p.body,source_snapshot:{kind:'email_draft',input:p,...(old?.['source_snapshot']?.google?{google:old['source_snapshot'].google}:{})}};const row=old?await update('agenda_drafts',old['id'],payload,old['updated_at']):await insert('agenda_drafts',payload);return {...p,updatedAt:row['updated_at']}; },
     async listFollowUps(): Promise<FollowUp[]> { return (await rows('agenda_tasks')).filter(r=>decode(r['notes'])['kind']==='followup').map(r=>({...decode(r['notes'])['input'],id:r['id'],timezone:BA_TZ,createdAt:r['created_at'],calendarEventId:r['calendar_event_id']||undefined,calendarUrl:decode(r['notes'])['google']?.url,googleAccount:decode(r['notes'])['google']?.account})); },
     async createFollowUp(input) { const p=parseOrThrow(followUpInputSchema,input);const link=p.link;if(link.kind==='bloque'){const all=await this.listClients();if(!link.clientIds.includes(p.clientId)||link.clientIds.some(id=>!all.some(c=>c.id===id)))throw new RepositoryRuleError('Elegí carteras válidas para el bloque.');}else if(link.kind==='pendiente'){const pending=(await pendings()).find(x=>x.id===link.pendingId);if(pending?.clientId!==p.clientId)throw new RepositoryRuleError('Pendiente de otra cartera.');}else{const r=await findReview(link.reviewId);if(r['clientId']!==p.clientId||(link.kind==='propuesta'&&r['decision']?.type!=='proponer_cambio'))throw new RepositoryRuleError('Referencia de seguimiento inválida.');}const row=await insert('agenda_tasks',{client_id:p.clientId,title:p.title,due_at:`${p.date}T${p.time}:00-03:00`,notes:JSON.stringify({kind:'followup',input:p})});return {...p,id:row['id'],timezone:BA_TZ,createdAt:row['created_at']}; },
   };

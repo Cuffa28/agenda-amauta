@@ -30,7 +30,7 @@ import {
   type Position,
 } from "@/domain/schemas";
 
-export function ReviewPanel({
+export function DetailedReviewPanel({
   clientId,
   month,
   status,
@@ -170,7 +170,7 @@ export function DecisionSummary({ decision }: { decision: Decision }) {
         <Badge variant="accent">{DECISION_LABELS[decision.type]}</Badge>
       </div>
       <dl className="grid gap-3 text-sm">
-        {rows.map(([k, v]) => (
+        {rows.filter(([, v]) => v.trim()).map(([k, v]) => (
           <div key={k}>
             <dt className="text-xs text-muted-foreground">{k}</dt>
             <dd className="whitespace-pre-wrap">{v}</dd>

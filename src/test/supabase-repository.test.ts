@@ -178,3 +178,27 @@ describe('Adaptador de datos reales',()=>{
   });
 
 });
+
+it('persiste contexto y notas privadas sin mezclarlas con borradores ni revisiones',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>d.client),id='0000-00';
+ const empty=await repo.getClientNotebook(id);
+ await repo.saveClientContext(id,{...empty.context,profile:'Moderado',objective:'Conservar capital',benchmark:'CER'});
+ await repo.addClientNote(id,{source:'asesor',body:'Necesita liquidez en febrero'});
+ const reopened=createSupabaseRepository(()=>d.client),notebook=await reopened.getClientNotebook(id);
+ expect(notebook.context.benchmark).toBe('CER');expect(notebook.notes[0]?.source).toBe('asesor');
+ expect(await reopened.listEmailDrafts(id)).toEqual([]);expect(await reopened.listReviews(id)).toEqual([]);
+ await expect(reopened.saveClientContext(id,{...notebook.context,profile:'Otro perfil'},'stale')).rejects.toThrow('otra sesión');
+});
+it('cierra una recomendación rápida sin inventar fundamentos ni exigir una nota',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>d.client);
+ const r=await repo.startReview({clientId:'0000-00',month:'2026-11'});
+ await repo.saveDecision(r.id,{type:'proponer_cambio',propuesta:'',fundamentoHorizonte:'',fundamentoLiquidez:'',datoReconsiderar:'',validacionAsesor:'pendiente'});
+ const saved=await repo.closeReview(r.id);expect(saved.status).toBe('cerrada');expect(saved.decision?.type).toBe('proponer_cambio');
+ const reopened=createSupabaseRepository(()=>d.client);expect((await reopened.listReviews('0000-00'))[0]?.decision).toEqual(saved.decision);
+ expect(d.tables['agenda_reviews']).toHaveLength(0);
+ await expect(reopened.saveDecision(r.id,{type:'mantener',nota:''})).rejects.toThrow('cerrada');
+ await expect(reopened.saveReviewAnalysis(r.id,'Cambio posterior')).rejects.toThrow('cerrada');
+ const pending=await reopened.createPending({clientId:r.clientId,reviewId:r.id,origin:'manual',description:'Consultar al asesor',dueDate:'2026-11-20'});
+ expect(pending.reviewId).toBe(r.id);expect(d.tables['agenda_tasks']![0].review_id).toBeNull();
+ expect(portfolioMonthStatus((await reopened.listClients())[0]!,'2026-11',await reopened.listReviews(),await reopened.listPendings(),'2026-11-16').countsAsReviewed).toBe(true);
+});

@@ -3,7 +3,7 @@ import type { AdvisorValidation, Decision, DecisionType } from "./schemas";
 
 export const DECISION_LABELS: Record<DecisionType, string> = {
   mantener: "Mantener",
-  proponer_cambio: "Proponer un cambio",
+  proponer_cambio: "Recomiendo cambio",
   falta_informacion: "Falta información",
 };
 

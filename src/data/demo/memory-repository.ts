@@ -1,3 +1,4 @@
+import {clientContextSchema,clientNoteSchema,emptyContext,type ClientNotebook} from '@/domain/client-notebook';
 import { describeDecision } from "@/domain/decision";
 import {
   clientUpdateSchema,
@@ -42,6 +43,7 @@ export function createMemoryRepository(
   now: () => Date = () => new Date(),
 ): AgendaRepository {
   const state = clone(dataset);
+  const notebooks = new Map<string,ClientNotebook>();
   state.reviews.forEach((r) => deepFreeze(r.marketViewSnapshot));
   state.marketView.versions.forEach((v) => deepFreeze(v));
   let seq = 0;
@@ -61,6 +63,9 @@ export function createMemoryRepository(
 
   return {
     mode: "demo-memoria",
+    async getClientNotebook(id) {if(!state.clients.some(c=>c.id===id))throw new RepositoryNotFoundError('Cliente',id);return clone(notebooks.get(id)||{context:{...emptyContext},notes:[]});},
+    async saveClientContext(id,context,expected) {const old=await this.getClientNotebook(id);if(old.updatedAt!==expected)throw new RepositoryRuleError('El contexto cambió en otra sesión.');const next={...old,context:parseOrThrow(clientContextSchema,context),updatedAt:nowIso()};notebooks.set(id,next);return clone(next);},
+    async addClientNote(id,input) {const old=await this.getClientNotebook(id);const note={...parseOrThrow(clientNoteSchema,input),id:newId('note'),at:nowIso()};notebooks.set(id,{...old,notes:[note,...old.notes]});return clone(note);},
 
     async listAdvisors() {
       return clone(state.advisors);

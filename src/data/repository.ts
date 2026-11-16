@@ -1,3 +1,4 @@
+import type {ClientContext, ClientNotebook, ClientNote} from '@/domain/client-notebook';
 import type { ZodError, ZodTypeAny, z } from "zod";
 
 import type {
@@ -33,6 +34,9 @@ export type RepositoryMode = "demo-memoria" | "supabase";
  */
 export interface AgendaRepository {
   readonly mode: RepositoryMode;
+  getClientNotebook(clientId:string):Promise<ClientNotebook>;
+  saveClientContext(clientId:string, context:ClientContext, expectedUpdatedAt?:string):Promise<ClientNotebook>;
+  addClientNote(clientId:string, note:Pick<ClientNote,'body'|'source'>):Promise<ClientNote>;
   listAdvisors(): Promise<Advisor[]>;
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;

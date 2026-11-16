@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getSupabase } from '@/data/supabase/client';
-import { connectGoogle, disconnectGoogle, googleConfig, googleSnapshot, saveGoogleConfig, subscribeGoogle, loadScript } from './workspace';
+import { connectGoogle, disconnectGoogle, googleConfig, googleSnapshot, saveGoogleConfig, subscribeGoogle, loadScript, restoreGoogle, forgetGoogle } from './workspace';
 export function useGoogleWorkspace() {
   const state = useSyncExternalStore(subscribeGoogle, googleSnapshot, googleSnapshot);
   const [now, setNow] = useState(Date.now());
@@ -10,7 +10,17 @@ export function useGoogleWorkspace() {
   return { ...state, connected: !!state.email && state.expiresAt > now + 5000 };
 }
 export function GoogleSessionGuard() {
-  useEffect(() => { try { const { data } = getSupabase().auth.onAuthStateChange(event => { if (event === 'SIGNED_OUT') disconnectGoogle(); }); return () => data.subscription.unsubscribe(); } catch { return undefined; } }, []);
+  useEffect(() => {
+    let active = true, account = '';
+    try {
+      const sb = getSupabase();
+      const recover = (id?: string) => { if (!active) return; if (!id) { account = ''; disconnectGoogle(); return; } if (id !== account) { disconnectGoogle(); account = id; void restoreGoogle(); } };
+      void sb.auth.getSession().then(({ data }) => recover(data.session?.user.id));
+      const { data } = sb.auth.onAuthStateChange((_event, session) => recover(session?.user.id));
+      const timer = setInterval(() => { const current = googleSnapshot(); if (current.email && !current.busy && !current.restoring && current.expiresAt <= Date.now() + 60000) void restoreGoogle(); }, 30000);
+      return () => { active = false; clearInterval(timer); data.subscription.unsubscribe(); };
+    } catch { return undefined; }
+  }, []);
   return null;
 }
 export function GoogleConnection({ showSetup = false }: { showSetup?: boolean }) {
@@ -18,9 +28,10 @@ export function GoogleConnection({ showSetup = false }: { showSetup?: boolean })
   const [config, setConfig] = useState(googleConfig), [error, setError] = useState('');
   useEffect(()=>{if(config.clientId)void loadScript('https://accounts.google.com/gsi/client').catch(()=>{});},[config.clientId]);
   return <div className="connection-card mb-5 space-y-3 p-5">
-    <p className="font-medium">Google Workspace · {google.connected ? google.email : 'Sin conexión activa'}</p>
-    <p className="text-sm text-muted-foreground">Drive: archivos que selecciones. Gmail: borradores. Calendar: eventos en tu calendario laboral, sin invitados. La conexión se renueva cuando Google la solicite.</p>
-    <div className="flex flex-wrap gap-2"><Button type="button" disabled={google.busy || !config.clientId} onClick={() => { setError(''); void connectGoogle().catch(e => setError(e.message)); }}>{google.busy ? 'Conectando…' : google.connected ? 'Cambiar cuenta de Google' : 'Conectar Google Workspace'}</Button>{google.email && <Button type="button" variant="outline" onClick={disconnectGoogle}>Desconectar esta sesión</Button>}</div>
+    <p className="font-medium">Google Workspace · {google.restoring ? 'Recuperando conexión…' : google.connected ? google.email : 'Sin conexión activa'}</p>
+    <p className="text-sm text-muted-foreground">Drive: archivos que selecciones. Gmail: borradores. Calendar: eventos en tu calendario laboral, sin invitados. La autorización se conserva en este navegador y el acceso se renueva automáticamente entre visitas. Google puede pedirte autorización otra vez si vence o la revocás.</p>
+    <div className="flex flex-wrap gap-2"><Button type="button" disabled={google.busy || google.restoring || !config.clientId} onClick={() => { setError(''); void connectGoogle().catch(e => setError(e.message)); }}>{google.restoring ? 'Recuperando…' : google.busy ? 'Conectando…' : google.connected ? 'Renovar autorización' : 'Conectar Google Workspace'}</Button>{google.email && <Button type="button" variant="outline" disabled={google.busy || google.restoring} onClick={() => { setError(''); void forgetGoogle().catch(e => setError(e.message)); }}>Desconectar Workspace de este navegador</Button>}</div>
+    {!google.connected && !google.busy && !google.restoring && google.error && <Button type="button" variant="outline" onClick={() => void restoreGoogle()}>Reintentar conexión guardada</Button>}
     {!config.clientId && <p className="text-sm">Falta configurar el proyecto de Google en Configuración.</p>}
     {(error || google.error) && <p role="alert" className="text-sm text-destructive">{error || google.error}</p>}
     {showSetup && <details><summary className="cursor-pointer text-sm">Configuración inicial del proyecto de Google</summary><form className="mt-3 grid gap-3" onSubmit={e => { e.preventDefault(); try { saveGoogleConfig(config); setError(''); } catch (e) { setError((e as Error).message); } }}>

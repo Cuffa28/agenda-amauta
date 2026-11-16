@@ -1,5 +1,5 @@
 import { isRealDate } from '@/domain/dates';
-import { requireAgendaSession } from '@/data/supabase/client';
+import { getSupabase, requireAgendaSession } from '@/data/supabase/client';
 
 export const GOOGLE_SCOPES = {
   drive: 'https://www.googleapis.com/auth/drive.file',
@@ -7,14 +7,13 @@ export const GOOGLE_SCOPES = {
   calendar: 'https://www.googleapis.com/auth/calendar.events.owned',
 } as const;
 export interface GoogleConfig { clientId: string; pickerKey: string; projectNumber: string }
-export interface GoogleState { email: string; expiresAt: number; busy: boolean; error: string }
-interface TokenResponse { access_token?: string; expires_in?: number; scope?: string; error?: string; error_description?: string }
-type TokenClient = { requestAccessToken: (options: { prompt: string; hint?: string }) => void };
-type GoogleGlobal = { accounts: { oauth2: { initTokenClient: (options: Record<string, unknown>) => TokenClient } }; picker?: any };
+export interface GoogleState { email: string; expiresAt: number; busy: boolean; error: string; restoring: boolean }
+interface CodeResponse { code?: string; error?: string; error_description?: string }
+type GoogleGlobal = { accounts: { oauth2: { initCodeClient: (options: Record<string, unknown>) => { requestCode: () => void } } }; picker?: any };
 declare global { interface Window { google?: GoogleGlobal; gapi?: { load: (name: string, options: { callback: () => void; onerror: () => void }) => void } } }
 
 let token = '', ownerId = '';
-let state: GoogleState = { email: '', expiresAt: 0, busy: false, error: '' };
+let state: GoogleState = { email: '', expiresAt: 0, busy: false, error: '', restoring: false };
 const listeners = new Set<() => void>();
 const scripts = new Map<string, Promise<void>>();
 export const subscribeGoogle = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
@@ -30,7 +29,44 @@ export function saveGoogleConfig(config: GoogleConfig) {
   if (config.projectNumber && !/^\d+$/.test(config.projectNumber)) throw Error('El número de proyecto debe contener solo dígitos.');
   localStorage.setItem('agenda.google.public-config', JSON.stringify(config)); disconnectGoogle();
 }
-export function disconnectGoogle() { token = ''; ownerId = ''; emit({ email: '', expiresAt: 0, busy: false, error: '' }); }
+let generation = 0;
+let restoring: Promise<void> | null = null;
+export function disconnectGoogle() { generation++; token = ''; ownerId = ''; restoring = null; emit({ email: '', expiresAt: 0, busy: false, restoring: false, error: '' }); }
+interface ConnectionResult { connected: boolean; email?: string; accessToken?: string; expiresAt?: number }
+class WorkspaceConnectionError extends Error { constructor(message: string, readonly code: string) { super(message); } }
+async function workspacePost(action: 'connect' | 'restore' | 'disconnect', code?: string) {
+  const { data, error } = await getSupabase().auth.getSession();
+  if (error || !data.session) throw Error('Ingresá a Agenda para recuperar Workspace.');
+  const response = await fetch('/api/google-workspace', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Agenda-Workspace': '1', Authorization: 'Bearer ' + data.session.access_token }, body: JSON.stringify({ action, ...(code ? { code } : {}) }) });
+  const result = await response.json();
+  if (!response.ok) throw new WorkspaceConnectionError(result.error || 'No se pudo recuperar Workspace.', result.code || 'unavailable');
+  return { result: result as ConnectionResult, userId: data.session.user.id };
+}
+function acceptConnection(result: ConnectionResult, userId: string) {
+  if (!result.connected || !result.accessToken || !result.email || !result.expiresAt) { token = ''; ownerId = ''; emit({ email: '', expiresAt: 0, restoring: false }); return; }
+  token = result.accessToken; ownerId = userId; emit({ email: result.email, expiresAt: result.expiresAt, busy: false, restoring: false, error: '' });
+}
+export async function restoreGoogle(): Promise<void> {
+  if (restoring) return restoring;
+  const current = generation;
+  emit({ restoring: true });
+  const operation = (async () => {
+    try {
+      const { result, userId } = await workspacePost('restore');
+      if (generation === current) acceptConnection(result, userId);
+    } catch (error) {
+      if (generation !== current) return;
+      if (error instanceof WorkspaceConnectionError && error.code === 'reconnect_required') { token = ''; ownerId = ''; emit({ email: '', expiresAt: 0 }); }
+      emit({ error: (error as Error).message, restoring: false });
+    } finally { if (generation === current) { restoring = null; emit({ restoring: false }); } }
+  })();
+  restoring = operation;
+  return operation;
+}
+export async function forgetGoogle(): Promise<void> {
+  const { result } = await workspacePost('disconnect');
+  if (!result.connected) disconnectGoogle();
+}
 export function loadScript(url: string): Promise<void> {
   if (!scripts.has(url)) scripts.set(url, new Promise((resolve, reject) => {
     const el = document.createElement('script'); el.src = url; el.async = true;
@@ -39,32 +75,28 @@ export function loadScript(url: string): Promise<void> {
   return scripts.get(url)!;
 }
 export async function connectGoogle(): Promise<void> {
-  if (state.busy) return;
+  if (state.busy || state.restoring) return;
   const config = googleConfig();
   if (!config.clientId) throw Error('Falta configurar el proyecto de Google en Configuración.');
   const { user } = await requireAgendaSession();
+  const current = generation;
   emit({ busy: true, error: '' });
   try {
     await loadScript('https://accounts.google.com/gsi/client');
-    const response = await new Promise<TokenResponse>((resolve, reject) => {
-      const client = window.google!.accounts.oauth2.initTokenClient({ client_id: config.clientId, scope: ['openid', 'email', 'profile', ...Object.values(GOOGLE_SCOPES)].join(' '), include_granted_scopes: true, callback: resolve, error_callback: () => reject(Error('Google no completó la conexión. Permití las ventanas emergentes e intentá de nuevo.')) });
-      client.requestAccessToken({ prompt: 'select_account', ...(user.email?.endsWith('@amautainversiones.com') ? { hint: user.email } : {}) });
+    const response = await new Promise<CodeResponse>((resolve, reject) => {
+      const client = window.google!.accounts.oauth2.initCodeClient({ client_id: config.clientId, scope: ['openid', 'email', 'profile', ...Object.values(GOOGLE_SCOPES)].join(' '), include_granted_scopes: true, ux_mode: 'popup', login_hint: user.email, hd: 'amautainversiones.com', callback: resolve, error_callback: () => reject(Error('Google no completó la conexión. Permití las ventanas emergentes e intentá de nuevo.')) });
+      client.requestCode();
     });
-    if (!response.access_token || response.error) throw Error(response.error_description || 'No se autorizaron los permisos de Google.');
-    const granted = new Set((response.scope || '').split(' '));
-    if (Object.values(GOOGLE_SCOPES).some(scope => !granted.has(scope))) throw Error('Falta autorizar alguno de los servicios: Drive, Gmail y Calendar. Volvé a conectar y revisá los permisos.');
-    const infoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${response.access_token}` } });
-    if (!infoResponse.ok) throw Error('Google no permitió comprobar la cuenta conectada.');
-    const info = await infoResponse.json();
-    if (user.email?.endsWith('@amautainversiones.com') && String(info.email).toLowerCase() !== user.email.toLowerCase()) throw Error('Conectá la misma cuenta laboral con la que ingresaste a Agenda.');
-    if (!info.email_verified || info.hd !== 'amautainversiones.com' || !String(info.email).toLowerCase().endsWith('@amautainversiones.com')) throw Error('Conectá tu cuenta laboral @amautainversiones.com.');
-    token = response.access_token; ownerId = user.id;
-    emit({ email: String(info.email).toLowerCase(), expiresAt: Date.now() + Number(response.expires_in || 3600) * 1000, busy: false });
-  } catch (error) { token = ''; ownerId = ''; emit({ email: '', expiresAt: 0, busy: false, error: (error as Error).message }); throw error; }
+    if (!response.code || response.error) throw Error(response.error_description || 'No se autorizaron los permisos de Google.');
+    if (generation !== current) return;
+    const { result, userId } = await workspacePost('connect', response.code);
+    if (generation === current) acceptConnection(result, userId);
+  } catch (error) { if (generation === current) emit({ busy: false, error: (error as Error).message }); throw error; }
 }
 async function accessToken() {
   const { user } = await requireAgendaSession();
-  if (!token || ownerId !== user.id || state.expiresAt <= Date.now() + 5000) { disconnectGoogle(); throw Error('Conectá Google Workspace para continuar. La autorización de esta sesión venció o no está activa.'); }
+  if (!token || ownerId !== user.id || state.expiresAt <= Date.now() + 60000) await restoreGoogle();
+  if (!token || ownerId !== user.id || state.expiresAt <= Date.now() + 5000) throw Error(state.error || 'Conectá Google Workspace una vez para autorizarlo en este navegador.');
   return token;
 }
 export class GoogleApiError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -76,10 +108,18 @@ export async function googleRequest<T>(url: string, init: RequestInit = {}): Pro
   const allowed=parsed.hostname==='gmail.googleapis.com' ? /^\/gmail\/v1\/users\/me\/drafts(?:\/[A-Za-z0-9_-]+)?$/.test(parsed.pathname)&&['GET','POST','PUT'].includes(method) : (/^\/(?:upload\/)?drive\/v3\/files(?:\/[A-Za-z0-9_-]+)?$/.test(parsed.pathname)||/^\/calendar\/v3\/calendars\/primary\/events(?:\/[A-Za-z0-9_-]+)?$/.test(parsed.pathname))&&['GET','POST'].includes(method);
   if(!allowed)throw Error('Esta acción Google no está habilitada en Agenda.');
   const access = await accessToken();
+  const requestGeneration = generation;
   let response: Response;
   try { response = await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${access}` } }); }
   catch { throw Error('No se pudo confirmar la respuesta de Google. Revisá el destino antes de repetir una creación.'); }
-  if (response.status === 401) { disconnectGoogle(); throw Error('La sesión de Google venció. Volvé a conectar.'); }
+  if (response.status === 401 && requestGeneration === generation) {
+    await restoreGoogle();
+    if (requestGeneration === generation && token && state.expiresAt > Date.now() + 5000) {
+      try { response = await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${token}` } }); }
+      catch { throw Error('No se pudo confirmar la respuesta de Google. Revisá el destino antes de repetir una creación.'); }
+    }
+  }
+  if (response.status === 401) throw Error(state.error || 'Google no aceptó la autorización. Volvé a conectar Workspace.');
   if (!response.ok) { const detail = await response.json().catch(() => ({})); throw new GoogleApiError(response.status, detail.error?.message || 'Google no pudo completar la operación.'); }
   return response.status === 204 ? undefined as T : response.json();
 }
@@ -133,6 +173,7 @@ export function calendarBody(input: CalendarInput, id: string) {
   return { id, summary: input.title, description: input.description, visibility: 'private', transparency: 'opaque', start: { dateTime: start.toISOString(), timeZone: 'America/Argentina/Buenos_Aires' }, end: { dateTime: new Date(start.getTime() + input.durationMinutes * 60000).toISOString(), timeZone: 'America/Argentina/Buenos_Aires' }, reminders: { useDefault: true }, extendedProperties: { private: { agendaKey: input.key } } };
 }
 export async function createCalendarEvent(input: CalendarInput) {
+  await accessToken();
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`agenda-amauta:${state.email}:${input.key}`));
   const id = 'ama' + Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
   const body = calendarBody(input, id), url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';

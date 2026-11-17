@@ -1,7 +1,12 @@
 import { PortfolioBoard } from "@/components/PortfolioBoard";
 import { Button } from "@/components/ui/button";
 import { boardStage, BOARD_LABELS } from "@/domain/board";
-import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
+import {
+  BoardStageSelect,
+  StageNote,
+  useMissedPrevious,
+  useStageChange,
+} from "@/components/BoardProgress";
 import { DECISION_LABELS } from "@/domain/decision";
 import { InitialsAvatar } from "@/components/AmautaBrand";
 import { useSuspenseQueries } from "@tanstack/react-query";
@@ -82,6 +87,7 @@ function ClientesPage() {
   });
   const [view, setView] = useState<"tablero" | "lista">("tablero");
   const { move, change, dialog } = useStageChange(month);
+  const missed = useMissedPrevious(month);
   const [q, setQ] = useState("");
   const [segment, setSegment] = useState(ALL);
   const [advisorId, setAdvisorId] = useState(ALL);
@@ -287,6 +293,7 @@ function ClientesPage() {
                           )}
                           entry={entries.find((e) => e.clientId === client.id)}
                           review={s.review}
+                          missed={missed(client.id)}
                         />
                       </div>
                     </TableCell>

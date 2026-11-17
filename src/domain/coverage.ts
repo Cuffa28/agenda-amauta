@@ -1,6 +1,25 @@
 import { boardStage, type BoardEntry } from "./board";
-import { addDays, daysInMonth, diffInDays } from "./dates";
+import { addDays, addMonths, daysInMonth, diffInDays, lastDayOfMonth } from "./dates";
 import type { Client, PendingItem, Review } from "./schemas";
+
+/**
+ * Mes anterior (AAAA-MM) si la cartera tenía una revisión prevista ese mes,
+ * el mes ya terminó y quedó sin revisar. Una cartera pausada ese mes no cuenta
+ * como incumplida.
+ */
+export function missedPreviousMonth(
+  client: Pick<Client, "id" | "reviewDay">,
+  month: string,
+  reviews: Review[],
+  pendings: PendingItem[],
+  today: string,
+  previousEntries: BoardEntry[] = [],
+): string | null {
+  const prev = addMonths(month, -1);
+  if (lastDayOfMonth(prev) >= today) return null;
+  const s = portfolioMonthStatus(client, prev, reviews, pendings, today, previousEntries);
+  return s.dueDate && !s.countsAsReviewed && s.status !== "pausada" ? prev : null;
+}
 
 /** Vencimiento mensual de la cartera; el día se ajusta al último día del mes si no existe. */
 export function dueDateForMonth(reviewDay: number, month: string): string {

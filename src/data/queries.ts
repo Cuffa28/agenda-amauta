@@ -22,6 +22,13 @@ export const followUpsQuery = () =>
   queryOptions({ queryKey: ["follow-ups"], queryFn: () => getRepository().listFollowUps() });
 
 
+export const tasksQuery = () =>
+  queryOptions({ queryKey: ["tasks"], queryFn: () => getRepository().listTasks() });
+export const recommendationsQuery = () =>
+  queryOptions({
+    queryKey: ["recommendations"],
+    queryFn: () => getRepository().listRecommendationRecords(),
+  });
 export const pausesQuery = () =>
   queryOptions({ queryKey: ["pauses"], queryFn: () => getRepository().listPauses() });
 /** Avance del mes con las pausas vigentes ya aplicadas (sobreviven al cambio de mes). */

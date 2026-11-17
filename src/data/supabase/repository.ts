@@ -5,11 +5,17 @@ import { describeDecision } from '@/domain/decision';
 import { stableUuid } from '@/domain/ids';
 import { BA_TZ, todayInBuenosAires } from '@/domain/dates';
 import { isPauseActive, pauseInputSchema, type ClientPause } from '@/domain/pause';
+import { taskDateSchema, taskInputSchema, TASK_STATUSES, type Task, type TaskStatus } from '@/domain/task';
+import { recommendationInputSchema, type RecommendationRecord } from '@/domain/recommendation';
+import { z } from 'zod';
 import { clientUpdateSchema, decisionSchema, emailDraftInputSchema, followUpInputSchema, marketViewVersionInputSchema, monthSchema, pendingInputSchema, positionSchema, reviewSchema, type Review, type PendingItem, type EmailDraft, type FollowUp, type Position } from '@/domain/schemas';
 import { parseOrThrow, RepositoryRuleError, type AgendaRepository } from '../repository';
 import { getSupabase, requireAgendaSession } from './client';
 import { advisorId, decode, mapAdvisors, mapClient, mapMarket, mapPosition, mapReview, type DbRow } from './mappers';
 
+const TASK_STATUS_DB: Record<TaskStatus, string> = { abierta: 'open', hecha: 'done', quitada: 'cancelled' };
+const mapTask = (r: DbRow): Task => ({ id: r['id'], title: r['title'], dueDate: r['due_at'] ? String(r['due_at']).slice(0, 10) : null, clientId: r['client_id'] ?? null, status: r['status'] === 'done' ? 'hecha' : r['status'] === 'cancelled' ? 'quitada' : 'abierta', createdAt: r['created_at'], updatedAt: r['updated_at'], closedAt: r['completed_at'] ?? null });
+const mapRecommendation = (r: DbRow): RecommendationRecord => { const s = r['source_snapshot']; return { id: r['id'], reviewId: s.reviewId, clientId: r['client_id'], state: s.state, on: s.on, note: s.note || '', updatedAt: r['updated_at'], history: s.history || [] }; };
 const mapPause = (r: DbRow): ClientPause => { const s = r['source_snapshot']; return { id: r['id'], clientId: s.clientId, since: s.since, until: s.until ?? null, endedOn: s.endedOn ?? null, updatedAt: r['updated_at'], history: s.history || [] }; };
 
 // Se usan exclusivamente agenda_*; nunca tablas de CRM ni claves privilegiadas.
@@ -30,7 +36,8 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
     return [...reviews, ...editing.filter(w => !reviews.some(r => r['id'] === w['id'])).map(w => w['source_snapshot'].review as Review)];
   };
   const findReview = async (id: string) => { const r = (await allReviews()).find(x => x.id === id); if (!r) throw new RepositoryRuleError('Revisión no encontrada.'); return r; };
-  const pendings = async (clientId?: string): Promise<PendingItem[]> => (await rows('agenda_tasks', clientId)).filter(r => decode(r['notes'])['kind'] !== 'followup').map(r => { const m = decode(r['notes']); return { id: r['id'], clientId: r['client_id'], reviewId: r['review_id'] || m['reviewId'] || '', origin: m['origin'] || 'manual', description: r['title'], dueDate: r['due_at'].slice(0,10), status: r['status'] === 'open' ? 'abierto' : 'resuelto', createdAt: r['created_at'], resolvedAt: r['completed_at'] }; });
+  // Pendientes de cartera: se excluyen seguimientos y tareas propias; una fila sin fecha o sin cliente nunca es un pendiente.
+  const pendings = async (clientId?: string): Promise<PendingItem[]> => (await rows('agenda_tasks', clientId)).filter(r => !['followup', 'task'].includes(decode(r['notes'])['kind']) && r['due_at'] && r['client_id']).map(r => { const m = decode(r['notes']); return { id: r['id'], clientId: r['client_id'], reviewId: r['review_id'] || m['reviewId'] || '', origin: m['origin'] || 'manual', description: r['title'], dueDate: r['due_at'].slice(0,10), status: r['status'] === 'open' ? 'abierto' : 'resuelto', createdAt: r['created_at'], resolvedAt: r['completed_at'] }; });
   const createPending = async (input: Parameters<AgendaRepository['createPending']>[0]) => {
     const p = parseOrThrow(pendingInputSchema, input), review = await findReview(p.reviewId); if (review.clientId !== p.clientId) throw new RepositoryRuleError('La revisión no pertenece a ese cliente.');
     const row = await insert('agenda_tasks', { client_id: p.clientId, review_id: (await rows('agenda_reviews',review.clientId)).some(r=>r['id']===review.id) ? review.id : null, title: p.description, due_at: `${p.dueDate}T12:00:00-03:00`, notes: JSON.stringify({ kind: 'pending', origin: p.origin, reviewId: p.reviewId }) });
@@ -81,6 +88,41 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const s=old['source_snapshot'];
       const payload={source_snapshot:{...s,endedOn:today,history:[...(s.history||[]),{action:'retoma',on:today,at:new Date().toISOString()}]}};
       return mapPause(await update('agenda_drafts',id,payload,old['updated_at']));
+    },
+    async listTasks() {
+      return (await rows('agenda_tasks')).filter(r => decode(r['notes'])['kind'] === 'task').map(mapTask);
+    },
+    async createTask(input) {
+      const p = parseOrThrow(taskInputSchema, input);
+      if (p.clientId) await findClient(p.clientId);
+      try {
+        return mapTask(await insert('agenda_tasks', { client_id: p.clientId, title: p.title, due_at: p.dueDate ? `${p.dueDate}T12:00:00-03:00` : null, notes: JSON.stringify({ kind: 'task' }) }));
+      } catch (e) {
+        // 23502: la base todavía exige cliente y fecha (cambio pendiente en Lovable).
+        if ((e as { code?: string }).code === '23502') throw new RepositoryRuleError('Por ahora la base exige cliente y fecha en cada tarea. Falta aplicar el cambio en Lovable para guardarla sin ellos.');
+        throw e;
+      }
+    },
+    async rescheduleTask(id, dueDate, expectedUpdatedAt) {
+      const d = parseOrThrow(taskDateSchema, dueDate);
+      try { return mapTask(await update('agenda_tasks', id, { due_at: d ? `${d}T12:00:00-03:00` : null }, expectedUpdatedAt)); }
+      catch (e) { if ((e as { code?: string }).code === '23502') throw new RepositoryRuleError('Por ahora la base exige fecha en cada tarea. Falta aplicar el cambio en Lovable.'); throw e; }
+    },
+    async setTaskStatus(id, status, expectedUpdatedAt) {
+      const s = parseOrThrow(z.enum(TASK_STATUSES), status);
+      return mapTask(await update('agenda_tasks', id, { status: TASK_STATUS_DB[s], completed_at: s === 'abierta' ? null : new Date().toISOString() }, expectedUpdatedAt));
+    },
+    async listRecommendationRecords() {
+      return (await rows('agenda_drafts', undefined, 'recommendation_followup')).map(mapRecommendation);
+    },
+    async saveRecommendationState(input) {
+      const p = parseOrThrow(recommendationInputSchema, input), review = await findReview(p.reviewId);
+      if (review.status !== 'cerrada' || review.decision?.type !== 'proponer_cambio') throw new RepositoryRuleError('Solo se sigue una recomendación de cambio ya guardada.');
+      const id = await stableUuid(`agenda-recommendation:${review.id}`), on = todayInBuenosAires();
+      const old = (await rows('agenda_drafts', review.clientId, 'recommendation_followup')).find(r => r['id'] === id);
+      const history = [...(old?.['source_snapshot'].history || []), { state: p.state, on, note: p.note, at: new Date().toISOString() }];
+      const payload = { client_id: review.clientId, subject: 'Seguimiento de recomendación', body: p.note, source_snapshot: { kind: 'recommendation_followup', reviewId: review.id, state: p.state, on, note: p.note, history } };
+      return mapRecommendation(old ? await update('agenda_drafts', id, payload, old['updated_at']) : await insert('agenda_drafts', { ...payload, id }));
     },
     async getClientNotebook(clientId) {
       const all = await rows('agenda_drafts', clientId);

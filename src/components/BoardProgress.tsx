@@ -16,7 +16,10 @@ import {
   type BoardEntry,
   type BoardStage,
 } from "@/domain/board";
-import { addDays, formatDate, todayInBuenosAires } from "@/domain/dates";
+import { useQueries } from "@tanstack/react-query";
+import { boardQuery, clientsQuery, pendingsQuery, reviewsQuery } from "@/data/queries";
+import { missedPreviousMonth } from "@/domain/coverage";
+import { addDays, addMonths, formatDate, todayInBuenosAires } from "@/domain/dates";
 import { nextMonthStart } from "@/domain/pause";
 import type { Review } from "@/domain/schemas";
 
@@ -180,6 +183,7 @@ export function stageNote(
   stage: BoardStage,
   entry: BoardEntry | undefined,
   review: Review | null | undefined,
+  missed?: string | null,
 ): { text: string; warn?: boolean } | null {
   if (stage === "pausada" && entry?.pausedUntil !== undefined)
     return entry.pausedUntil
@@ -187,17 +191,43 @@ export function stageNote(
       : { text: "Sin fecha de regreso", warn: true };
   if (stage !== "pausada" && entry?.resumedOn)
     return { text: `Retomada el ${formatDate(entry.resumedOn)}` };
+  if (missed && (stage === "pendiente" || stage === "en_revision"))
+    return { text: `Sin revisar en ${monthName(missed)}`, warn: true };
   if (stage === "revisada" && !(review?.status === "cerrada" && review.decision))
     return { text: "Sin conclusión" };
   return null;
+}
+
+const monthName = (month: string) =>
+  new Intl.DateTimeFormat("es-AR", { month: "long", timeZone: "UTC" }).format(
+    new Date(month + "-15T12:00:00Z"),
+  );
+
+/**
+ * Devuelve, por cliente, el mes anterior si quedó sin revisar teniendo una
+ * revisión prevista. Usa consultas ya cacheadas; mientras cargan no marca nada.
+ */
+export function useMissedPrevious(month: string) {
+  const [clients, reviews, pendings, board] = useQueries({
+    queries: [clientsQuery(), reviewsQuery(), pendingsQuery(), boardQuery(addMonths(month, -1))],
+  });
+  const today = todayInBuenosAires();
+  return (clientId: string): string | null => {
+    if (!clients.data || !reviews.data || !pendings.data || !board.data) return null;
+    const client = clients.data.find((c) => c.id === clientId);
+    return client
+      ? missedPreviousMonth(client, month, reviews.data, pendings.data, today, board.data)
+      : null;
+  };
 }
 
 export function StageNote(props: {
   stage: BoardStage;
   entry?: BoardEntry | undefined;
   review?: Review | null | undefined;
+  missed?: string | null;
 }) {
-  const note = stageNote(props.stage, props.entry, props.review);
+  const note = stageNote(props.stage, props.entry, props.review, props.missed);
   if (!note) return null;
   return (
     <span className={`text-xs ${note.warn ? "text-amber-700" : "text-muted-foreground"}`}>

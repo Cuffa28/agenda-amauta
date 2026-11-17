@@ -17,6 +17,9 @@ import {
 } from "@/domain/schemas";
 import { BA_TZ, todayInBuenosAires } from "@/domain/dates";
 import { isPauseActive, pauseInputSchema, type ClientPause } from "@/domain/pause";
+import { taskDateSchema, taskInputSchema, TASK_STATUSES, type Task } from "@/domain/task";
+import { recommendationInputSchema, type RecommendationRecord } from "@/domain/recommendation";
+import { z } from "zod";
 
 import {
   parseOrThrow,
@@ -48,6 +51,9 @@ export function createMemoryRepository(
   const notebooks = new Map<string,ClientNotebook>();
   const board = new Map<string,BoardEntry>();
   const pauses = new Map<string,ClientPause>();
+  const tasks = new Map<string,Task>();
+  const recommendations = new Map<string,RecommendationRecord>();
+  const findTask = (id:string,expected:string) => {const t=tasks.get(id);if(!t)throw new RepositoryNotFoundError('Tarea',id);if(t.updatedAt!==expected)throw new RepositoryRuleError('La tarea cambió en otra sesión.');return t;};
   state.reviews.forEach((r) => deepFreeze(r.marketViewSnapshot));
   state.marketView.versions.forEach((v) => deepFreeze(v));
   let seq = 0;
@@ -81,6 +87,22 @@ export function createMemoryRepository(
       const old=pauses.get(clientId),today=todayInBuenosAires(now());if(!old||!isPauseActive(old,today))return null;
       const at=nowIso();const next:ClientPause={...old,endedOn:today,updatedAt:at,history:[...old.history,{action:'retoma',on:today,at}]};
       pauses.set(clientId,next);return clone(next);
+    },
+    async listTasks() {return clone([...tasks.values()]);},
+    async createTask(input) {
+      const p=parseOrThrow(taskInputSchema,input);if(p.clientId&&!state.clients.some(c=>c.id===p.clientId))throw new RepositoryNotFoundError('Cliente',p.clientId);
+      const at=nowIso();const t:Task={id:newId('tarea'),title:p.title,dueDate:p.dueDate,clientId:p.clientId,status:'abierta',createdAt:at,updatedAt:at,closedAt:null};
+      tasks.set(t.id,t);return clone(t);
+    },
+    async rescheduleTask(id,dueDate,expected) {const old=findTask(id,expected);const next={...old,dueDate:parseOrThrow(taskDateSchema,dueDate),updatedAt:nowIso()};tasks.set(id,next);return clone(next);},
+    async setTaskStatus(id,status,expected) {const old=findTask(id,expected);const s=parseOrThrow(z.enum(TASK_STATUSES),status),at=nowIso();const next={...old,status:s,closedAt:s==='abierta'?null:at,updatedAt:at};tasks.set(id,next);return clone(next);},
+    async listRecommendationRecords() {return clone([...recommendations.values()]);},
+    async saveRecommendationState(input) {
+      const p=parseOrThrow(recommendationInputSchema,input),review=findReview(p.reviewId);
+      if(review.status!=='cerrada'||review.decision?.type!=='proponer_cambio')throw new RepositoryRuleError('Solo se sigue una recomendación de cambio ya guardada.');
+      const old=recommendations.get(review.id),on=todayInBuenosAires(now()),at=nowIso();
+      const next:RecommendationRecord={id:'rec-'+review.id,reviewId:review.id,clientId:review.clientId,state:p.state,on,note:p.note,updatedAt:at,history:[...(old?.history||[]),{state:p.state,on,note:p.note,at}]};
+      recommendations.set(review.id,next);return clone(next);
     },
     async getClientNotebook(id) {if(!state.clients.some(c=>c.id===id))throw new RepositoryNotFoundError('Cliente',id);return clone(notebooks.get(id)||{context:{...emptyContext},notes:[]});},
     async saveClientContext(id,context,expected) {const old=await this.getClientNotebook(id);if(old.updatedAt!==expected)throw new RepositoryRuleError('El contexto cambió en otra sesión.');const next={...old,context:parseOrThrow(clientContextSchema,context),updatedAt:nowIso()};notebooks.set(id,next);return clone(next);},

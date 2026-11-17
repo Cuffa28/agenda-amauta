@@ -1,5 +1,7 @@
 import type {BoardEntry,BoardInput} from '@/domain/board';
 import type {ClientPause,PauseInput} from '@/domain/pause';
+import type {Task,TaskInput,TaskStatus} from '@/domain/task';
+import type {RecommendationInput,RecommendationRecord} from '@/domain/recommendation';
 import type {ClientContext, ClientNotebook, ClientNote} from '@/domain/client-notebook';
 import type { ZodError, ZodTypeAny, z } from "zod";
 
@@ -46,6 +48,14 @@ export interface AgendaRepository {
   pauseClient(input:PauseInput):Promise<ClientPause>;
   /** Retoma antes de la fecha prevista. Sin pausa activa no hace nada. */
   resumeClient(clientId:string):Promise<ClientPause|null>;
+  /** Tareas propias (captura rápida), separadas de los pendientes de cartera. */
+  listTasks():Promise<Task[]>;
+  createTask(input:TaskInput):Promise<Task>;
+  rescheduleTask(id:string, dueDate:string|null, expectedUpdatedAt:string):Promise<Task>;
+  /** Hecha o quitada se pueden revertir a abierta: nunca se borra. */
+  setTaskStatus(id:string, status:TaskStatus, expectedUpdatedAt:string):Promise<Task>;
+  listRecommendationRecords():Promise<RecommendationRecord[]>;
+  saveRecommendationState(input:RecommendationInput):Promise<RecommendationRecord>;
   listAdvisors(): Promise<Advisor[]>;
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;

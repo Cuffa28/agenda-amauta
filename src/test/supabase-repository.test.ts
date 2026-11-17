@@ -228,3 +228,22 @@ it('guarda la pausa por cliente en agenda_drafts, la retoma una vez y no toca ot
  expect((await repo.listPauses())[0]?.history.map(h=>h.action)).toEqual(['pausa','pausa','retoma']);
  expect(d.tables['agenda_tasks']).toHaveLength(0);expect(d.tables['agenda_clients']!.every(c=>c.updated_at==='2026-11-12T10:00:00Z')).toBe(true);
 });
+
+it('las tareas propias quedan separadas de los pendientes y una fila sin fecha o cliente no rompe las lecturas',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>d.client);
+ const t=await repo.createTask({title:'Leer informe',dueDate:null,clientId:null});
+ expect(t).toMatchObject({dueDate:null,clientId:null,status:'abierta'});
+ const withClient=await repo.createTask({title:'Llamar al asesor',dueDate:'2026-11-20',clientId:'0000-00'});
+ expect(d.tables['agenda_tasks']!.find(r=>r.id===withClient.id).due_at).toBe('2026-11-20T12:00:00-03:00');
+ expect(await repo.listPendings()).toEqual([]);expect(await repo.listFollowUps()).toEqual([]);
+ expect((await repo.listTasks()).map(x=>x.title).sort()).toEqual(['Leer informe','Llamar al asesor']);
+ const removed=await repo.setTaskStatus(t.id,'quitada',t.updatedAt);expect(d.tables['agenda_tasks']!.find(r=>r.id===t.id).status).toBe('cancelled');
+ const back=await repo.setTaskStatus(t.id,'abierta',removed.updatedAt);expect(back.status).toBe('abierta');
+ await expect(repo.setTaskStatus(t.id,'hecha',removed.updatedAt)).rejects.toThrow('otra sesión');
+ expect(d.tables['agenda_tasks']).toHaveLength(2);
+});
+
+it('si la base todavía exige cliente y fecha, avisa en lugar de fallar en silencio',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>({from:(n:string)=>n==='agenda_tasks'?{insert:()=>({select:()=>({single:async()=>({data:null,error:{code:'23502',message:'null value'}})})})}:d.client.from(n)}) as any);
+ await expect(repo.createTask({title:'Leer',dueDate:null,clientId:null})).rejects.toThrow('Lovable');
+});

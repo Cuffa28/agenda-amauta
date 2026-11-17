@@ -13,7 +13,13 @@ import { Button } from "@/components/ui/button";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
 import { PositionCard } from "@/components/ficha/PositionCard";
-import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
+import {
+  BoardStageSelect,
+  StageNote,
+  useMissedPrevious,
+  useStageChange,
+} from "@/components/BoardProgress";
+import { RecommendationBadge, RecommendationTracker } from "@/components/RecommendationTracker";
 import { positionsQuery } from "@/data/queries";
 import {
   BOARD_STAGES,
@@ -43,6 +49,7 @@ export function PortfolioBoard({
     [over, setOver] = useState<BoardStage | null>(null),
     [selected, setSelected] = useState<string | null>(null);
   const { move, change, dialog } = useStageChange(month);
+  const missed = useMissedPrevious(month);
   const gesture = useRef<{
     clientId: string;
     pointerId: number;
@@ -186,6 +193,7 @@ export function PortfolioBoard({
                           {DECISION_LABELS[decision.type]}
                         </span>
                       )}
+                      <RecommendationBadge review={review} />
                       {note && (
                         <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
                           {note}
@@ -198,7 +206,12 @@ export function PortfolioBoard({
                           label={`Estado de ${client.name}`}
                           onChange={(value) => moveTo(client.id, value)}
                         />
-                        <StageNote stage={stage} entry={entry} review={review} />
+                        <StageNote
+                          stage={stage}
+                          entry={entry}
+                          review={review}
+                          missed={missed(client.id)}
+                        />
                       </div>
                       {at && (
                         <p className="mt-2 text-[11px] text-muted-foreground">
@@ -267,6 +280,7 @@ export function PortfolioBoard({
                     entriesByClient.get(selectedClient.id),
                   )}
                 />
+                <RecommendationTracker review={reviewsByClient.get(selectedClient.id)} />
                 <ClientNotebook clientId={selectedClient.id} />
                 <details>
                   <summary className="cursor-pointer text-sm">Ver cartera y PDF</summary>

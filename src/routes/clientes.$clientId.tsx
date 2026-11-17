@@ -1,4 +1,10 @@
-import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
+import {
+  BoardStageSelect,
+  StageNote,
+  useMissedPrevious,
+  useStageChange,
+} from "@/components/BoardProgress";
+import { RecommendationTracker } from "@/components/RecommendationTracker";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
@@ -62,6 +68,7 @@ function ClientPage() {
     ],
   });
   const { move, change, dialog } = useStageChange(month);
+  const missed = useMissedPrevious(month);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const client = clients.find((c) => c.id === clientId),
     position = positions.find((p) => p.clientId === clientId) ?? null;
@@ -129,6 +136,7 @@ function ClientPage() {
           )}
           entry={entries.find((e) => e.clientId === clientId)}
           review={review}
+          missed={missed(clientId)}
         />
         {move.error && (
           <p role="alert" className="text-sm text-destructive">
@@ -147,6 +155,9 @@ function ClientPage() {
             entries.find((e) => e.clientId === clientId),
           )}
         />
+        <div className="mt-3">
+          <RecommendationTracker review={review} />
+        </div>
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-muted-foreground">
             Análisis detallado y datos a confirmar

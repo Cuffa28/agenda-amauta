@@ -1,5 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import { todayInBuenosAires } from "@/domain/dates";
+import { applyPauses } from "@/domain/pause";
 import { getRepository } from "./index";
 
 export const advisorsQuery = () =>
@@ -20,4 +22,15 @@ export const followUpsQuery = () =>
   queryOptions({ queryKey: ["follow-ups"], queryFn: () => getRepository().listFollowUps() });
 
 
-export const boardQuery = (month:string) => queryOptions({queryKey:['board',month],queryFn:()=>getRepository().listBoardEntries(month)});
+export const pausesQuery = () =>
+  queryOptions({ queryKey: ["pauses"], queryFn: () => getRepository().listPauses() });
+/** Avance del mes con las pausas vigentes ya aplicadas (sobreviven al cambio de mes). */
+export const boardQuery = (month: string) =>
+  queryOptions({
+    queryKey: ["board", month],
+    queryFn: async () => {
+      const repo = getRepository();
+      const [entries, pauses] = await Promise.all([repo.listBoardEntries(month), repo.listPauses()]);
+      return applyPauses(entries, pauses, month, todayInBuenosAires());
+    },
+  });

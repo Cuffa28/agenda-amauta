@@ -1,4 +1,4 @@
-import { BoardStageSelect, useBoardMove } from "@/components/BoardProgress";
+import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
@@ -61,7 +61,7 @@ function ClientPage() {
       boardQuery(month),
     ],
   });
-  const move = useBoardMove(month);
+  const { move, change, dialog } = useStageChange(month);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const client = clients.find((c) => c.id === clientId),
     position = positions.find((p) => p.clientId === clientId) ?? null;
@@ -105,6 +105,7 @@ function ClientPage() {
         </SectionCard>
       )}
       <div className="flex flex-wrap items-center gap-3">
+        {dialog}
         <span className="text-sm text-muted-foreground">Avance del mes</span>
         <BoardStageSelect
           value={boardStage(
@@ -113,8 +114,21 @@ function ClientPage() {
           )}
           disabled={move.isPending}
           onChange={(stage) =>
-            move.mutate({ clientId, stage, entry: entries.find((e) => e.clientId === clientId) })
+            change({
+              clientId,
+              name: client.name,
+              stage,
+              entry: entries.find((e) => e.clientId === clientId),
+            })
           }
+        />
+        <StageNote
+          stage={boardStage(
+            review,
+            entries.find((e) => e.clientId === clientId),
+          )}
+          entry={entries.find((e) => e.clientId === clientId)}
+          review={review}
         />
         {move.error && (
           <p role="alert" className="text-sm text-destructive">

@@ -15,7 +15,8 @@ import {
   type Review,
   type FollowUp,
 } from "@/domain/schemas";
-import { BA_TZ } from "@/domain/dates";
+import { BA_TZ, todayInBuenosAires } from "@/domain/dates";
+import { isPauseActive, pauseInputSchema, type ClientPause } from "@/domain/pause";
 
 import {
   parseOrThrow,
@@ -46,6 +47,7 @@ export function createMemoryRepository(
   const state = clone(dataset);
   const notebooks = new Map<string,ClientNotebook>();
   const board = new Map<string,BoardEntry>();
+  const pauses = new Map<string,ClientPause>();
   state.reviews.forEach((r) => deepFreeze(r.marketViewSnapshot));
   state.marketView.versions.forEach((v) => deepFreeze(v));
   let seq = 0;
@@ -67,6 +69,19 @@ export function createMemoryRepository(
     mode: "demo-memoria",
     async listBoardEntries(month) {parseOrThrow(monthSchema,month);return clone([...board.values()].filter(e=>e.month===month));},
     async moveBoardEntry(input) {const p=parseOrThrow(boardInputSchema,input);if(!state.clients.some(c=>c.id===p.clientId))throw new RepositoryNotFoundError('Cliente',p.clientId);const id=p.clientId+':'+p.month,old=board.get(id);if(old?.updatedAt!==p.expectedUpdatedAt)throw new RepositoryRuleError('La tarjeta cambió en otra sesión.');const at=nowIso();const next={id,clientId:p.clientId,month:p.month,stage:p.stage,updatedAt:at,history:[...(old?.history||[]),{stage:p.stage,at}]};board.set(id,next);return clone(next);},
+    async listPauses() {return clone([...pauses.values()]);},
+    async pauseClient(input) {
+      const p=parseOrThrow(pauseInputSchema,input);if(!state.clients.some(c=>c.id===p.clientId))throw new RepositoryNotFoundError('Cliente',p.clientId);
+      const today=todayInBuenosAires(now());if(p.until!==null&&p.until<=today)throw new RepositoryRuleError('La fecha de regreso tiene que ser posterior a hoy.');
+      const old=pauses.get(p.clientId),at=nowIso();
+      const next:ClientPause={id:'pausa-'+p.clientId,clientId:p.clientId,since:today,until:p.until,endedOn:null,updatedAt:at,history:[...(old?.history||[]),{action:'pausa',on:today,until:p.until,at}]};
+      pauses.set(p.clientId,next);return clone(next);
+    },
+    async resumeClient(clientId) {
+      const old=pauses.get(clientId),today=todayInBuenosAires(now());if(!old||!isPauseActive(old,today))return null;
+      const at=nowIso();const next:ClientPause={...old,endedOn:today,updatedAt:at,history:[...old.history,{action:'retoma',on:today,at}]};
+      pauses.set(clientId,next);return clone(next);
+    },
     async getClientNotebook(id) {if(!state.clients.some(c=>c.id===id))throw new RepositoryNotFoundError('Cliente',id);return clone(notebooks.get(id)||{context:{...emptyContext},notes:[]});},
     async saveClientContext(id,context,expected) {const old=await this.getClientNotebook(id);if(old.updatedAt!==expected)throw new RepositoryRuleError('El contexto cambió en otra sesión.');const next={...old,context:parseOrThrow(clientContextSchema,context),updatedAt:nowIso()};notebooks.set(id,next);return clone(next);},
     async addClientNote(id,input) {const old=await this.getClientNotebook(id);const note={...parseOrThrow(clientNoteSchema,input),id:newId('note'),at:nowIso()};notebooks.set(id,{...old,notes:[note,...old.notes]});return clone(note);},

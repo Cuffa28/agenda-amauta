@@ -1,7 +1,7 @@
 import { PortfolioBoard } from "@/components/PortfolioBoard";
 import { Button } from "@/components/ui/button";
 import { boardStage, BOARD_LABELS } from "@/domain/board";
-import { BoardStageSelect, useBoardMove } from "@/components/BoardProgress";
+import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
 import { DECISION_LABELS } from "@/domain/decision";
 import { InitialsAvatar } from "@/components/AmautaBrand";
 import { useSuspenseQueries } from "@tanstack/react-query";
@@ -81,7 +81,7 @@ function ClientesPage() {
     queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery(), boardQuery(month)],
   });
   const [view, setView] = useState<"tablero" | "lista">("tablero");
-  const move = useBoardMove(month);
+  const { move, change, dialog } = useStageChange(month);
   const [q, setQ] = useState("");
   const [segment, setSegment] = useState(ALL);
   const [advisorId, setAdvisorId] = useState(ALL);
@@ -207,6 +207,7 @@ function ClientesPage() {
         />
       ) : (
         <>
+          {dialog}
           {move.error && (
             <p role="alert" className="text-sm text-destructive">
               {move.error.message}
@@ -270,13 +271,24 @@ function ClientesPage() {
                         disabled={move.isPending}
                         label={"Estado de " + client.name}
                         onChange={(stage) =>
-                          move.mutate({
+                          change({
                             clientId: client.id,
+                            name: client.name,
                             stage,
                             entry: entries.find((e) => e.clientId === client.id),
                           })
                         }
                       />
+                      <div>
+                        <StageNote
+                          stage={boardStage(
+                            s.review,
+                            entries.find((e) => e.clientId === client.id),
+                          )}
+                          entry={entries.find((e) => e.clientId === client.id)}
+                          review={s.review}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span

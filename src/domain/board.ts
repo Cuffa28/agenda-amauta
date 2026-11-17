@@ -22,9 +22,22 @@ export interface BoardEntry {
   stage: BoardStage;
   updatedAt: string;
   history: { stage: BoardStage; at: string }[];
+  /** Derivado de una pausa vigente: fecha de regreso (null = sin fecha). */
+  pausedUntil?: string | null;
+  /** Derivado: la pausa terminó este mes en esa fecha. */
+  resumedOn?: string;
+  /** Derivado: updated_at real de la fila del mes (null si todavía no existe). */
+  rowUpdatedAt?: string | null;
+}
+/** Valor esperado para el control de concurrencia al mover la tarjeta. */
+export function entryVersion(entry?: BoardEntry): string | undefined {
+  if (!entry) return undefined;
+  return entry.rowUpdatedAt !== undefined ? (entry.rowUpdatedAt ?? undefined) : entry.updatedAt;
 }
 /** Avance mensual separado de la decisión. Una revisión guardada después del último movimiento finaliza el trabajo. */
 export function boardStage(review: Review | null | undefined, entry?: BoardEntry): BoardStage {
+  // Una pausa ya vencida no retiene la tarjeta: vuelve a su estado natural.
+  if (entry?.resumedOn && entry.stage === "pausada") entry = undefined;
   if (entry && (!review?.closedAt || entry.updatedAt >= review.closedAt)) return entry.stage;
   return review?.status === "cerrada" ? "revisada" : review ? "en_revision" : "pendiente";
 }

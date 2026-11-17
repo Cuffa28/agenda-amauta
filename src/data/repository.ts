@@ -1,4 +1,5 @@
 import type {BoardEntry,BoardInput} from '@/domain/board';
+import type {ClientPause,PauseInput} from '@/domain/pause';
 import type {ClientContext, ClientNotebook, ClientNote} from '@/domain/client-notebook';
 import type { ZodError, ZodTypeAny, z } from "zod";
 
@@ -40,6 +41,11 @@ export interface AgendaRepository {
   addClientNote(clientId:string, note:Pick<ClientNote,'body'|'source'>):Promise<ClientNote>;
   listBoardEntries(month:string):Promise<BoardEntry[]>;
   moveBoardEntry(input:BoardInput):Promise<BoardEntry>;
+  /** Una pausa por cliente (la última), con historial de pausas y retomas. */
+  listPauses():Promise<ClientPause[]>;
+  pauseClient(input:PauseInput):Promise<ClientPause>;
+  /** Retoma antes de la fecha prevista. Sin pausa activa no hace nada. */
+  resumeClient(clientId:string):Promise<ClientPause|null>;
   listAdvisors(): Promise<Advisor[]>;
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;

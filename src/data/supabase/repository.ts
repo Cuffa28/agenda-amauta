@@ -3,11 +3,14 @@ import {clientContextSchema,clientNoteSchema,emptyContext} from '@/domain/client
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describeDecision } from '@/domain/decision';
 import { stableUuid } from '@/domain/ids';
-import { BA_TZ } from '@/domain/dates';
+import { BA_TZ, todayInBuenosAires } from '@/domain/dates';
+import { isPauseActive, pauseInputSchema, type ClientPause } from '@/domain/pause';
 import { clientUpdateSchema, decisionSchema, emailDraftInputSchema, followUpInputSchema, marketViewVersionInputSchema, monthSchema, pendingInputSchema, positionSchema, reviewSchema, type Review, type PendingItem, type EmailDraft, type FollowUp, type Position } from '@/domain/schemas';
 import { parseOrThrow, RepositoryRuleError, type AgendaRepository } from '../repository';
 import { getSupabase, requireAgendaSession } from './client';
 import { advisorId, decode, mapAdvisors, mapClient, mapMarket, mapPosition, mapReview, type DbRow } from './mappers';
+
+const mapPause = (r: DbRow): ClientPause => { const s = r['source_snapshot']; return { id: r['id'], clientId: s.clientId, since: s.since, until: s.until ?? null, endedOn: s.endedOn ?? null, updatedAt: r['updated_at'], history: s.history || [] }; };
 
 // Se usan exclusivamente agenda_*; nunca tablas de CRM ni claves privilegiadas.
 export function createSupabaseRepository(client: () => SupabaseClient = getSupabase): AgendaRepository {
@@ -55,6 +58,29 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const payload={client_id:p.clientId,subject:'Avance de revisión mensual',body:'',source_snapshot:{kind:'client_board',clientId:p.clientId,month:p.month,stage:p.stage,history}};
       const row=old?await update('agenda_drafts',id,payload,p.expectedUpdatedAt):await insert('agenda_drafts',{...payload,id});
       return {...row['source_snapshot'],id,updatedAt:row['updated_at']};
+    },
+    // La pausa se guarda por cliente (no por mes) para que sobreviva al cambio de mes.
+    async listPauses() {
+      return (await rows('agenda_drafts',undefined,'client_pause')).map(mapPause);
+    },
+    async pauseClient(input) {
+      const p=parseOrThrow(pauseInputSchema,input);await findClient(p.clientId);
+      const today=todayInBuenosAires();
+      if(p.until!==null&&p.until<=today)throw new RepositoryRuleError('La fecha de regreso tiene que ser posterior a hoy.');
+      const id=await stableUuid(`agenda-client-pause:${p.clientId}`);
+      const old=(await rows('agenda_drafts',p.clientId,'client_pause')).find(r=>r['id']===id);
+      const history=[...(old?.['source_snapshot'].history||[]),{action:'pausa',on:today,until:p.until,at:new Date().toISOString()}];
+      const payload={client_id:p.clientId,subject:'Pausa de cartera',body:'',source_snapshot:{kind:'client_pause',clientId:p.clientId,since:today,until:p.until,endedOn:null,history}};
+      return mapPause(old?await update('agenda_drafts',id,payload,old['updated_at']):await insert('agenda_drafts',{...payload,id}));
+    },
+    async resumeClient(clientId) {
+      const id=await stableUuid(`agenda-client-pause:${clientId}`);
+      const old=(await rows('agenda_drafts',clientId,'client_pause')).find(r=>r['id']===id);
+      const today=todayInBuenosAires();
+      if(!old||!isPauseActive(mapPause(old),today))return null;
+      const s=old['source_snapshot'];
+      const payload={source_snapshot:{...s,endedOn:today,history:[...(s.history||[]),{action:'retoma',on:today,at:new Date().toISOString()}]}};
+      return mapPause(await update('agenda_drafts',id,payload,old['updated_at']));
     },
     async getClientNotebook(clientId) {
       const all = await rows('agenda_drafts', clientId);

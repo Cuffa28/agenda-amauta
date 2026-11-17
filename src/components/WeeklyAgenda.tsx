@@ -9,6 +9,7 @@ import {
   pendingsQuery,
   followUpsQuery,
   boardQuery,
+  pausesQuery,
 } from "@/data/queries";
 import { addDays, formatDate, todayInBuenosAires } from "@/domain/dates";
 import { portfolioMonthStatus } from "@/domain/coverage";
@@ -21,10 +22,15 @@ export function WeeklyAgenda() {
   });
   const end = addDays(start, 6),
     days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
-  const [{ data: clients }, { data: reviews }, { data: pendings }, { data: followups }] =
-    useSuspenseQueries({
-      queries: [clientsQuery(), reviewsQuery(), pendingsQuery(), followUpsQuery()],
-    });
+  const [
+    { data: clients },
+    { data: reviews },
+    { data: pendings },
+    { data: followups },
+    { data: pauses },
+  ] = useSuspenseQueries({
+    queries: [clientsQuery(), reviewsQuery(), pendingsQuery(), followUpsQuery(), pausesQuery()],
+  });
   const months = [...new Set([start.slice(0, 7), end.slice(0, 7)])];
   const boards = useSuspenseQueries({ queries: months.map(boardQuery) }).flatMap((q) => q.data);
   const clientNames = new Map(clients.map((c) => [c.id, c.name]));
@@ -62,9 +68,26 @@ export function WeeklyAgenda() {
     time: f.time,
     month: f.date.slice(0, 7),
   }));
-  const items = [...reviewItems, ...pendingItems, ...eventItems];
+  // El día de regreso de una pausa aparece en la semana como aviso.
+  const resumeItems = pauses
+    .filter((p) => !p.endedOn && p.until && p.until >= start && p.until <= end)
+    .map((p) => ({
+      id: "pausa:" + p.clientId,
+      date: p.until!,
+      clientId: p.clientId,
+      title: "Vuelve de la pausa",
+      kind: "Retomar",
+      time: "",
+      month: p.until!.slice(0, 7),
+    }));
+  const items = [...reviewItems, ...pendingItems, ...eventItems, ...resumeItems];
   const overdue = items.filter(
-    (i) => i.date && i.date < today && i.kind !== "En Calendar" && i.kind !== "Bloque preparado",
+    (i) =>
+      i.date &&
+      i.date < today &&
+      i.kind !== "En Calendar" &&
+      i.kind !== "Bloque preparado" &&
+      i.kind !== "Retomar",
   );
   return (
     <SectionCard

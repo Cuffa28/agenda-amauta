@@ -215,3 +215,16 @@ it('mueve tarjetas con historial, persiste al recargar y rechaza escrituras de o
  expect(await repo.listReviews(clientId)).toEqual([]);expect(await repo.listEmailDrafts(clientId)).toEqual([]);
  expect(d.tables['agenda_tasks']).toHaveLength(0);
 });
+
+it('guarda la pausa por cliente en agenda_drafts, la retoma una vez y no toca otras tablas',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>d.client),clientId='0000-00';
+ const p=await repo.pauseClient({clientId,until:'2099-01-15'});
+ expect(p).toMatchObject({clientId,until:'2099-01-15',endedOn:null});
+ const again=await createSupabaseRepository(()=>d.client).pauseClient({clientId,until:null});
+ expect(again.id).toBe(p.id);expect(again.history.map(h=>h.until)).toEqual(['2099-01-15',null]);
+ expect(d.tables['agenda_drafts']!.filter(r=>r.source_snapshot.kind==='client_pause')).toHaveLength(1);
+ const resumed=await repo.resumeClient(clientId);expect(resumed?.endedOn).toBeTruthy();
+ expect(await repo.resumeClient(clientId)).toBeNull();
+ expect((await repo.listPauses())[0]?.history.map(h=>h.action)).toEqual(['pausa','pausa','retoma']);
+ expect(d.tables['agenda_tasks']).toHaveLength(0);expect(d.tables['agenda_clients']!.every(c=>c.updated_at==='2026-11-12T10:00:00Z')).toBe(true);
+});

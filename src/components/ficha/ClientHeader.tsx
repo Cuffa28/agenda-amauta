@@ -57,7 +57,7 @@ export function ClientHeader({
             </span>
             {client.isDemo && <DemoBadge />}
             <span className="text-sm text-muted-foreground">
-              {status.status==='pausada'?'Pausada':status.countsAsReviewed?'Revisada':status.status==='en_curso'?'En revisión':'Pendiente'}
+              {status.status==='pausada'?'Pausada':status.countsAsReviewed?(status.review?.status==='cerrada'&&status.review.decision?'Revisada':'Revisada · sin conclusión'):status.status==='en_curso'?'En revisión':'Pendiente'}
             </span>
           </div>
           <h1 className="mt-2 text-2xl font-semibold text-foreground">{client.name}</h1>

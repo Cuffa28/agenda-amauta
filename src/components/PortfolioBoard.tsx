@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
 import { PositionCard } from "@/components/ficha/PositionCard";
-import { BoardStageSelect, useBoardMove } from "@/components/BoardProgress";
+import { BoardStageSelect, StageNote, useStageChange } from "@/components/BoardProgress";
 import { positionsQuery } from "@/data/queries";
 import {
   BOARD_STAGES,
@@ -42,7 +42,7 @@ export function PortfolioBoard({
   const [dragged, setDragged] = useState<string | null>(null),
     [over, setOver] = useState<BoardStage | null>(null),
     [selected, setSelected] = useState<string | null>(null);
-  const move = useBoardMove(month);
+  const { move, change, dialog } = useStageChange(month);
   const gesture = useRef<{
     clientId: string;
     pointerId: number;
@@ -66,10 +66,11 @@ export function PortfolioBoard({
     if (move.isPending) return;
     const entry = entriesByClient.get(id);
     if (boardStage(reviewsByClient.get(id), entry) === stage) return;
-    move.mutate({ clientId: id, stage, entry });
+    change({ clientId: id, name: clients.find((c) => c.id === id)?.name || id, stage, entry });
   };
   return (
     <>
+      {dialog}
       <p className="mb-4 text-xs text-muted-foreground">
         Arrastrá desde el asa o elegí el estado en la tarjeta. Hacé clic en el nombre para ver el
         detalle.
@@ -190,13 +191,14 @@ export function PortfolioBoard({
                           {note}
                         </p>
                       )}
-                      <div className="mt-4">
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
                         <BoardStageSelect
                           value={stage}
                           disabled={move.isPending}
                           label={`Estado de ${client.name}`}
                           onChange={(value) => moveTo(client.id, value)}
                         />
+                        <StageNote stage={stage} entry={entry} review={review} />
                       </div>
                       {at && (
                         <p className="mt-2 text-[11px] text-muted-foreground">

@@ -1,27 +1,211 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useRepoMutation } from "@/data/use-repo-mutation";
-import { BOARD_STAGES, BOARD_LABELS, type BoardEntry, type BoardStage } from "@/domain/board";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  BOARD_STAGES,
+  BOARD_LABELS,
+  entryVersion,
+  type BoardEntry,
+  type BoardStage,
+} from "@/domain/board";
+import { addDays, formatDate, todayInBuenosAires } from "@/domain/dates";
+import { nextMonthStart } from "@/domain/pause";
+import type { Review } from "@/domain/schemas";
+
+type MoveInput = {
+  clientId: string;
+  stage: BoardStage;
+  entry?: BoardEntry | undefined;
+  /** Solo al pausar: fecha de regreso (null = sin fecha). */
+  until?: string | null;
+};
+
 export function useBoardMove(month: string) {
-  const cache = useQueryClient();
   return useRepoMutation(
-    (repo, input: { clientId: string; stage: BoardStage; entry?: BoardEntry | undefined }) =>
-      repo.moveBoardEntry({
+    async (repo, input: MoveInput) => {
+      // Pausar guarda la fecha de regreso en el cliente; salir de Pausada la retoma.
+      if (input.stage === "pausada")
+        await repo.pauseClient({ clientId: input.clientId, until: input.until ?? null });
+      else if (input.entry?.pausedUntil !== undefined) await repo.resumeClient(input.clientId);
+      return repo.moveBoardEntry({
         clientId: input.clientId,
         month,
         stage: input.stage,
-        expectedUpdatedAt: input.entry?.updatedAt,
-      }),
-    {
-      success: "Estado guardado",
-      invalidate: [],
-      onSuccess: (entry) =>
-        cache.setQueryData<BoardEntry[]>(["board", month], (old) => [
-          entry,
-          ...(old || []).filter((e) => e.clientId !== entry.clientId),
-        ]),
+        expectedUpdatedAt: entryVersion(input.entry),
+      });
     },
+    { success: "Estado guardado", invalidate: ["board", "pauses"] },
   );
 }
+
+/**
+ * Cambio de estado desde tablero, lista o ficha. Pasar a Pausada pregunta
+ * primero cuándo retomarla; el resto se guarda directo.
+ */
+export function useStageChange(month: string) {
+  const move = useBoardMove(month);
+  const [asking, setAsking] = useState<{
+    clientId: string;
+    name: string;
+    entry?: BoardEntry | undefined;
+  } | null>(null);
+  const change = (input: {
+    clientId: string;
+    name: string;
+    stage: BoardStage;
+    entry?: BoardEntry | undefined;
+  }) => {
+    if (move.isPending) return;
+    if (input.stage === "pausada") setAsking(input);
+    else move.mutate(input);
+  };
+  const dialog = (
+    <PauseDialog
+      key={asking?.clientId ?? "none"}
+      target={asking}
+      busy={move.isPending}
+      onCancel={() => setAsking(null)}
+      onConfirm={(until) => {
+        if (!asking) return;
+        move.mutate(
+          { clientId: asking.clientId, stage: "pausada", entry: asking.entry, until },
+          { onSuccess: () => setAsking(null) },
+        );
+      }}
+    />
+  );
+  return { move, change, dialog };
+}
+
+function PauseDialog({
+  target,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  target: { name: string } | null;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (until: string | null) => void;
+}) {
+  const today = todayInBuenosAires();
+  const next = nextMonthStart(today);
+  const [choice, setChoice] = useState<"mes" | "fecha" | "sin">("mes");
+  const [date, setDate] = useState("");
+  const until = choice === "mes" ? next : choice === "fecha" ? date : null;
+  const invalid = choice === "fecha" && (!date || date <= today);
+  return (
+    <Dialog
+      open={!!target}
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Pausar {target?.name}</DialogTitle>
+          <DialogDescription>
+            ¿Cuándo la retomás? Ese día vuelve sola a Pendiente.
+          </DialogDescription>
+        </DialogHeader>
+        <fieldset className="grid gap-3 text-sm">
+          <legend className="sr-only">Fecha de regreso</legend>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="pause-until"
+              checked={choice === "mes"}
+              onChange={() => setChoice("mes")}
+            />
+            Próximo mes ({formatDate(next)})
+          </label>
+          <label className="flex flex-wrap items-center gap-2">
+            <input
+              type="radio"
+              name="pause-until"
+              checked={choice === "fecha"}
+              onChange={() => setChoice("fecha")}
+            />
+            Elegir fecha
+            <input
+              type="date"
+              aria-label="Fecha de regreso"
+              className="rounded-lg border bg-background px-2 py-1 text-sm"
+              min={addDays(today, 1)}
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setChoice("fecha");
+              }}
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="pause-until"
+              checked={choice === "sin"}
+              onChange={() => setChoice("sin")}
+            />
+            Sin fecha
+          </label>
+          {choice === "sin" && (
+            <p className="text-xs text-muted-foreground">
+              Va a quedar en Pausada hasta que la muevas a mano.
+            </p>
+          )}
+        </fieldset>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button onClick={() => onConfirm(until)} disabled={busy || invalid}>
+            Pausar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Aclaración breve bajo el estado: hasta cuándo está pausada, si se retomó o si falta la conclusión. */
+export function stageNote(
+  stage: BoardStage,
+  entry: BoardEntry | undefined,
+  review: Review | null | undefined,
+): { text: string; warn?: boolean } | null {
+  if (stage === "pausada" && entry?.pausedUntil !== undefined)
+    return entry.pausedUntil
+      ? { text: `Hasta ${formatDate(entry.pausedUntil)}` }
+      : { text: "Sin fecha de regreso", warn: true };
+  if (stage !== "pausada" && entry?.resumedOn)
+    return { text: `Retomada el ${formatDate(entry.resumedOn)}` };
+  if (stage === "revisada" && !(review?.status === "cerrada" && review.decision))
+    return { text: "Sin conclusión" };
+  return null;
+}
+
+export function StageNote(props: {
+  stage: BoardStage;
+  entry?: BoardEntry | undefined;
+  review?: Review | null | undefined;
+}) {
+  const note = stageNote(props.stage, props.entry, props.review);
+  if (!note) return null;
+  return (
+    <span className={`text-xs ${note.warn ? "text-amber-700" : "text-muted-foreground"}`}>
+      {note.text}
+    </span>
+  );
+}
+
 export function BoardStageSelect({
   value,
   disabled,

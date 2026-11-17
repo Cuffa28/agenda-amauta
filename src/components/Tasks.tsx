@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,18 +11,13 @@ export function QuickCapture({ clients }: { clients: Pick<Client, "id" | "name">
   const [title, setTitle] = useState(""),
     [date, setDate] = useState(""),
     [clientId, setClientId] = useState("");
+  type Sent = { title: string; date: string; clientId: string };
+  const current = useRef<Sent>({ title, date, clientId });
+  current.current = { title, date, clientId };
   const create = useRepoMutation(
-    (repo, _: void) =>
-      repo.createTask({ title, dueDate: date || null, clientId: clientId || null }),
-    {
-      success: "Tarea guardada",
-      invalidate: ["tasks"],
-      onSuccess: () => {
-        setTitle("");
-        setDate("");
-        setClientId("");
-      },
-    },
+    (repo, v: Sent) =>
+      repo.createTask({ title: v.title, dueDate: v.date || null, clientId: v.clientId || null }),
+    { success: "Tarea guardada", invalidate: ["tasks"] },
   );
   const sorted = [...clients].sort((a, b) => a.name.localeCompare(b.name));
   return (
@@ -31,7 +26,24 @@ export function QuickCapture({ clients }: { clients: Pick<Client, "id" | "name">
       aria-label="Captura rápida"
       onSubmit={(e) => {
         e.preventDefault();
-        if (title.trim() && !create.isPending) create.mutate();
+        if (!title.trim() || create.isPending) return;
+        const sent: Sent = { title, date, clientId };
+        create.mutate(sent, {
+          // Solo limpia si el formulario sigue igual a lo enviado: lo que se
+          // escribió mientras se guardaba no se pierde.
+          onSuccess: () => {
+            const cur = current.current;
+            if (
+              cur.title === sent.title &&
+              cur.date === sent.date &&
+              cur.clientId === sent.clientId
+            ) {
+              setTitle("");
+              setDate("");
+              setClientId("");
+            }
+          },
+        });
       }}
     >
       <Input
@@ -69,6 +81,50 @@ export function QuickCapture({ clients }: { clients: Pick<Client, "id" | "name">
   );
 }
 
+/** Tareas de una cuenta en su ficha: las mismas de Mi semana, leídas de la misma consulta. */
+export function ClientTasks({ clientId, tasks }: { clientId: string; tasks: Task[] }) {
+  const mine = tasks.filter((t) => t.clientId === clientId);
+  const open = mine
+    .filter((t) => t.status === "abierta")
+    .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
+  const closed = mine
+    .filter((t) => t.status !== "abierta")
+    .sort((a, b) => (b.closedAt ?? b.updatedAt).localeCompare(a.closedAt ?? a.updatedAt));
+  return (
+    <details id="tareas" className="surface-card p-4" open={open.length > 0}>
+      <summary className="cursor-pointer text-sm font-medium">
+        Tareas de esta cuenta · {open.length}
+      </summary>
+      <div className="mt-3 grid gap-2">
+        {mine.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            Sin tareas. Se cargan desde la captura rápida de Mi semana.
+          </p>
+        )}
+        {open.map((t) => (
+          <div key={t.id} className="flex items-center gap-2 text-sm">
+            <TaskRow task={t} showClient={false} />
+          </div>
+        ))}
+        {closed.length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-xs text-muted-foreground">
+              Hechas y quitadas · {closed.length}
+            </summary>
+            <div className="mt-2 grid gap-2">
+              {closed.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 text-sm">
+                  <TaskRow task={t} showClient={false} />
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function useTaskActions() {
   const status = useRepoMutation(
     (repo, v: { task: Task; status: TaskStatus }) =>
@@ -84,7 +140,15 @@ function useTaskActions() {
 }
 
 /** Fila de tarea: hecha, cambiar fecha o quitar. Las cerradas se pueden recuperar. */
-export function TaskRow({ task, clientName }: { task: Task; clientName?: string | undefined }) {
+export function TaskRow({
+  task,
+  clientName,
+  showClient = true,
+}: {
+  task: Task;
+  clientName?: string | undefined;
+  showClient?: boolean;
+}) {
   const { status, reschedule, busy } = useTaskActions();
   const open = task.status === "abierta";
   return (
@@ -100,7 +164,7 @@ export function TaskRow({ task, clientName }: { task: Task; clientName?: string 
       )}
       <span className={`min-w-0 ${open ? "" : "text-muted-foreground line-through"}`}>
         {task.title}
-        {task.clientId && (
+        {task.clientId && showClient && (
           <Link
             to="/clientes/$clientId"
             params={{ clientId: task.clientId }}

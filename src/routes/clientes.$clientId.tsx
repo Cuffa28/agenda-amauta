@@ -5,6 +5,7 @@ import {
   useStageChange,
 } from "@/components/BoardProgress";
 import { RecommendationTracker } from "@/components/RecommendationTracker";
+import { ClientTasks } from "@/components/Tasks";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
@@ -32,6 +33,7 @@ import {
   marketViewQuery,
   draftsQuery,
   boardQuery,
+  tasksQuery,
 } from "@/data/queries";
 import { portfolioMonthStatus } from "@/domain/coverage";
 import { currentMonthInBuenosAires, todayInBuenosAires } from "@/domain/dates";
@@ -55,6 +57,7 @@ function ClientPage() {
     { data: marketView },
     { data: drafts },
     { data: entries },
+    { data: tasks },
   ] = useSuspenseQueries({
     queries: [
       clientsQuery(),
@@ -65,6 +68,7 @@ function ClientPage() {
       marketViewQuery(),
       draftsQuery(clientId),
       boardQuery(month),
+      tasksQuery(),
     ],
   });
   const { move, change, dialog } = useStageChange(month);
@@ -105,6 +109,7 @@ function ClientPage() {
         <a href="#contexto">Contexto y notas</a>
         <a href="#posicion">Cartera y PDF</a>
         <a href="#mi-agenda">Agendar</a>
+        <a href="#tareas">Tareas</a>
       </nav>
       {client.liquidityNote && (
         <SectionCard title="Mandato del cliente">
@@ -256,6 +261,7 @@ function ClientPage() {
           />
         </div>
       </details>
+      <ClientTasks clientId={clientId} tasks={tasks} />
       {position && (
         <details
           className="surface-card p-4"

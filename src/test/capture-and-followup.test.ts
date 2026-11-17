@@ -65,6 +65,50 @@ describe("Marca de cambio de mes", () => {
     const now = applyPauses([], [pause], "2026-11", "2026-11-17")[0];
     expect(stageNote("pausada", now, null, "2026-10")?.text).toBe("Hasta 15/01/2027");
   });
+
+  it("una pausa nueva no cambia lo que correspondía a meses anteriores", () => {
+    // Pausada en septiembre hasta el 1/11; el 17/11 se vuelve a pausar hasta enero.
+    const pause: ClientPause = {
+      id: "p",
+      clientId: client.id,
+      since: "2026-11-17",
+      until: "2027-01-01",
+      endedOn: null,
+      updatedAt: "2026-11-17T15:00:00Z",
+      history: [
+        { action: "pausa", on: "2026-09-10", until: "2026-11-01", at: "2026-09-10T15:00:00Z" },
+        { action: "pausa", on: "2026-11-17", until: "2027-01-01", at: "2026-11-17T15:00:00Z" },
+      ],
+    };
+    const oct = applyPauses([], [pause], "2026-10", "2026-11-17");
+    expect(oct[0]).toMatchObject({ stage: "pausada", pausedUntil: "2026-11-01" });
+    expect(missedPreviousMonth(client, "2026-11", [], [], "2026-11-17", oct)).toBeNull();
+    // Noviembre: retomada el 1/11 y vuelta a pausar el 17 → figura pausada hasta enero.
+    const nov = applyPauses([], [pause], "2026-11", "2026-11-17")[0];
+    expect(nov).toMatchObject({ stage: "pausada", pausedUntil: "2027-01-01" });
+    // Diciembre no recibe la marca de noviembre: noviembre también quedó pausada.
+    expect(missedPreviousMonth(client, "2026-12", [], [], "2026-12-05", [nov!])).toBeNull();
+  });
+
+  it("retomar a mano cierra el período en ese día y una pausa posterior abre otro", () => {
+    const pause: ClientPause = {
+      id: "p",
+      clientId: client.id,
+      since: "2026-12-10",
+      until: null,
+      endedOn: null,
+      updatedAt: "2026-12-10T15:00:00Z",
+      history: [
+        { action: "pausa", on: "2026-09-10", until: null, at: "2026-09-10T15:00:00Z" },
+        { action: "retoma", on: "2026-10-20", at: "2026-10-20T15:00:00Z" },
+        { action: "pausa", on: "2026-12-10", until: null, at: "2026-12-10T15:00:00Z" },
+      ],
+    };
+    expect(applyPauses([], [pause], "2026-10", "2026-12-15")[0]?.resumedOn).toBe("2026-10-20");
+    // Noviembre quedó libre: corresponde revisarla.
+    expect(applyPauses([], [pause], "2026-11", "2026-12-15")).toEqual([]);
+    expect(applyPauses([], [pause], "2026-12", "2026-12-15")[0]?.stage).toBe("pausada");
+  });
 });
 
 describe("Seguimiento de recomendaciones", () => {

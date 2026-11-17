@@ -35,6 +35,42 @@ export function isPauseActive(p: ClientPause, today: string): boolean {
   return !p.endedOn && (p.until === null || p.until > today);
 }
 
+export interface PauseInterval {
+  since: string;
+  until: string | null;
+  endedOn: string | null;
+  updatedAt: string;
+}
+
+/**
+ * Períodos de pausa de la cartera, reconstruidos desde el historial. Una pausa
+ * nueva cierra la anterior (si seguía vigente) en su propio día, sin alterar
+ * los meses que la anterior ya cubría.
+ */
+export function pauseIntervals(p: ClientPause): PauseInterval[] {
+  const out: PauseInterval[] = [];
+  for (const h of p.history) {
+    const last = out[out.length - 1];
+    if (h.action === "pausa") {
+      if (last && !last.endedOn && (last.until === null || last.until > h.on)) last.endedOn = h.on;
+      out.push({ since: h.on, until: h.until ?? null, endedOn: null, updatedAt: h.at });
+    } else if (last && !last.endedOn && (last.until === null || last.until > h.on)) {
+      last.endedOn = h.on;
+      last.updatedAt = h.at;
+    }
+  }
+  // El estado actual del registro manda sobre el último período.
+  const current: PauseInterval = {
+    since: p.since,
+    until: p.until,
+    endedOn: p.endedOn,
+    updatedAt: p.updatedAt,
+  };
+  if (out.length && out[out.length - 1]!.since === p.since) out[out.length - 1] = current;
+  else out.push(current);
+  return out;
+}
+
 /**
  * Combina el avance guardado del mes con las pausas vigentes.
  * - Pausa en curso: la tarjeta figura en Pausada, con su fecha de regreso.
@@ -51,16 +87,23 @@ export function applyPauses(
   const monthStart = month + "-01",
     monthEnd = lastDayOfMonth(month);
   const byClient = new Map(entries.map((e) => [e.clientId, e]));
-  for (const p of pauses) {
+  for (const pause of pauses) {
+    // Último período que toca el mes: una pausa nueva no reescribe meses anteriores.
+    const p = pauseIntervals(pause)
+      .filter((i) => {
+        const end = i.endedOn ?? i.until;
+        return i.since.slice(0, 7) <= month && (end === null || end > monthStart);
+      })
+      .pop();
+    if (!p) continue;
     const end = p.endedOn ?? p.until;
-    if (p.since.slice(0, 7) > month) continue;
-    if (end !== null && end <= monthStart) continue;
-    const real = byClient.get(p.clientId);
+    const clientId = pause.clientId;
+    const real = byClient.get(clientId);
     // Un movimiento manual posterior a la pausa manda.
     if (real && real.updatedAt > p.updatedAt && real.stage !== "pausada") continue;
     const base: BoardEntry = real ?? {
-      id: `pausa:${p.clientId}:${month}`,
-      clientId: p.clientId,
+      id: `pausa:${clientId}:${month}`,
+      clientId,
       month,
       stage: "pausada",
       updatedAt: p.updatedAt,
@@ -68,9 +111,9 @@ export function applyPauses(
     };
     const rowUpdatedAt = real?.updatedAt ?? null;
     if (end !== null && end <= today && end <= monthEnd) {
-      byClient.set(p.clientId, { ...base, resumedOn: end, rowUpdatedAt });
+      byClient.set(clientId, { ...base, resumedOn: end, rowUpdatedAt });
     } else {
-      byClient.set(p.clientId, {
+      byClient.set(clientId, {
         ...base,
         stage: "pausada",
         updatedAt: base.updatedAt > p.updatedAt ? base.updatedAt : p.updatedAt,

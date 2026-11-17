@@ -19,6 +19,12 @@ import { BA_TZ, todayInBuenosAires } from "@/domain/dates";
 import { isPauseActive, pauseInputSchema, type ClientPause } from "@/domain/pause";
 import { taskDateSchema, taskInputSchema, TASK_STATUSES, type Task } from "@/domain/task";
 import { recommendationInputSchema, type RecommendationRecord } from "@/domain/recommendation";
+import {
+  advisorVisibleClients,
+  PEDIDO_STATUSES,
+  requestInputSchema,
+  type AdvisorRequest,
+} from "@/domain/request";
 import { z } from "zod";
 
 import {
@@ -40,6 +46,15 @@ function deepFreeze<T>(value: T): T {
 const clone = <T>(v: T): T => structuredClone(v);
 
 /**
+ * Quién usa la demo. En la base real lo determina la sesión y agenda_access;
+ * acá se puede cambiar para probar la pantalla del asesor sin recargar.
+ */
+export const demoViewer: { role: "owner" | "asesor"; email: string } = {
+  role: "owner",
+  email: "owner@example.com",
+};
+
+/**
  * Repositorio DEMO en memoria del navegador. Se reinicia al recargar la página.
  * No persiste en localStorage ni simula conexiones externas.
  */
@@ -53,6 +68,10 @@ export function createMemoryRepository(
   const pauses = new Map<string,ClientPause>();
   const tasks = new Map<string,Task>();
   const recommendations = new Map<string,RecommendationRecord>();
+  const requests = new Map<string,AdvisorRequest>();
+  const visibleClients = () => demoViewer.role === 'owner' ? state.clients : advisorVisibleClients(state.clients, state.advisors, demoViewer.email, []);
+  const requireOwner = () => { if (demoViewer.role !== 'owner') throw new RepositoryRuleError('Solo Facundo puede cambiar el estado.'); };
+  const findRequest = (id:string, expected?:string) => { const r=requests.get(id); if(!r||(demoViewer.role!=='owner'&&r.authorEmail!==demoViewer.email))throw new RepositoryNotFoundError('Pedido',id); if(expected!==undefined&&r.updatedAt!==expected)throw new RepositoryRuleError('El pedido cambió en otra sesión. Recargá.'); return r; };
   const findTask = (id:string,expected:string) => {const t=tasks.get(id);if(!t)throw new RepositoryNotFoundError('Tarea',id);if(t.updatedAt!==expected)throw new RepositoryRuleError('La tarea cambió en otra sesión.');return t;};
   state.reviews.forEach((r) => deepFreeze(r.marketViewSnapshot));
   state.marketView.versions.forEach((v) => deepFreeze(v));
@@ -87,6 +106,25 @@ export function createMemoryRepository(
       const old=pauses.get(clientId),today=todayInBuenosAires(now());if(!old||!isPauseActive(old,today))return null;
       const at=nowIso();const next:ClientPause={...old,endedOn:today,updatedAt:at,history:[...old.history,{action:'retoma',on:today,at}]};
       pauses.set(clientId,next);return clone(next);
+    },
+    async listRequestClients() {return visibleClients().map(c=>({id:c.id,name:c.name})).sort((a,b)=>a.name.localeCompare(b.name));},
+    async listRequests() {return clone([...requests.values()].filter(r=>demoViewer.role==='owner'||r.authorEmail===demoViewer.email).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)));},
+    async createRequest(input) {
+      if(demoViewer.role!=='asesor')throw new RepositoryRuleError('Los pedidos los cargan los asesores.');
+      const p=parseOrThrow(requestInputSchema,input);if(!visibleClients().some(c=>c.id===p.clientId))throw new RepositoryRuleError('Ese cliente no está entre los tuyos.');
+      const at=nowIso(),status=p.kind==='pedido'?'recibido' as const:'vigente' as const;
+      const r:AdvisorRequest={id:newId('pedido'),clientId:p.clientId,kind:p.kind,body:p.body,desiredDate:p.desiredDate,authorEmail:demoViewer.email,status,seenAt:null,createdAt:at,updatedAt:at,history:[{status,by:demoViewer.email,at}]};
+      requests.set(r.id,r);return clone(r);
+    },
+    async setRequestStatus(id,status,expected) {
+      requireOwner();const old=findRequest(id,expected);if(old.kind!=='pedido')throw new RepositoryRuleError('Una indicación no tiene ese estado.');
+      const s=parseOrThrow(z.enum(PEDIDO_STATUSES),status),at=nowIso();
+      const next={...old,status:s,seenAt:at,updatedAt:at,history:s===old.status?old.history:[...old.history,{status:s,by:demoViewer.email,at}]};requests.set(id,next);return clone(next);
+    },
+    async markRequestSeen(id,expected) {requireOwner();const old=findRequest(id,expected),at=nowIso();const next={...old,seenAt:at,updatedAt:at};requests.set(id,next);return clone(next);},
+    async retireIndication(id) {
+      const old=findRequest(id);if(old.kind!=='indicacion'||old.status!=='vigente')throw new RepositoryRuleError('La indicación ya no estaba vigente.');
+      const at=nowIso();const next={...old,status:'ya_no_aplica' as const,updatedAt:at,history:[...old.history,{status:'ya_no_aplica' as const,by:demoViewer.email,at}]};requests.set(id,next);return clone(next);
     },
     async listTasks() {return clone([...tasks.values()]);},
     async createTask(input) {

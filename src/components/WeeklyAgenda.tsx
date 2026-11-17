@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/PageHeader";
 import { QuickCapture, TaskRow } from "@/components/Tasks";
+import { NewBadge, RequestRow } from "@/components/Requests";
 import {
   clientsQuery,
   reviewsQuery,
@@ -13,11 +14,13 @@ import {
   pausesQuery,
   tasksQuery,
   recommendationsQuery,
+  requestsQuery,
 } from "@/data/queries";
 import { addDays, formatDate, todayInBuenosAires } from "@/domain/dates";
 import { portfolioMonthStatus } from "@/domain/coverage";
 import { waitingRecommendations } from "@/domain/recommendation";
 import type { Task } from "@/domain/task";
+import { isNewRequest, type AdvisorRequest } from "@/domain/request";
 
 interface AgendaItem {
   id: string;
@@ -28,6 +31,7 @@ interface AgendaItem {
   time: string;
   month: string;
   task?: Task;
+  request?: AdvisorRequest;
 }
 
 /** Tipos que no cuentan como "sin resolver" cuando la fecha ya pasó. */
@@ -49,6 +53,7 @@ export function WeeklyAgenda() {
     { data: pauses },
     { data: tasks },
     { data: recommendations },
+    { data: requests },
   ] = useSuspenseQueries({
     queries: [
       clientsQuery(),
@@ -58,6 +63,7 @@ export function WeeklyAgenda() {
       pausesQuery(),
       tasksQuery(),
       recommendationsQuery(),
+      requestsQuery(),
     ],
   });
   const months = [...new Set([start.slice(0, 7), end.slice(0, 7)])];
@@ -121,6 +127,32 @@ export function WeeklyAgenda() {
       month: r.month,
     }),
   );
+  // Pedidos de asesores: los que tienen fecha deseada van a ese día; el resto,
+  // y las indicaciones nuevas, al grupo "Pedidos de asesores".
+  const openPedidos = requests.filter(
+    (r) => r.kind === "pedido" && (r.status === "recibido" || r.status === "en_curso"),
+  );
+  const requestItems: AgendaItem[] = openPedidos
+    .filter((r) => r.desiredDate)
+    .map((r) => ({
+      id: "pedido:" + r.id,
+      date: r.desiredDate!,
+      clientId: r.clientId,
+      title: r.body,
+      kind: "Pedido de asesor",
+      time: "",
+      month: r.desiredDate!.slice(0, 7),
+      request: r,
+    }));
+  const requestInbox = requests
+    .filter(
+      (r) => (r.kind === "pedido" && openPedidos.includes(r) && !r.desiredDate) || isNewRequest(r),
+    )
+    .sort(
+      (a, b) =>
+        Number(isNewRequest(b)) - Number(isNewRequest(a)) || a.createdAt.localeCompare(b.createdAt),
+    );
+  const freshRequests = requests.filter(isNewRequest).length;
   const openTasks = tasks.filter((t) => t.status === "abierta");
   const taskItems: AgendaItem[] = openTasks
     .filter((t) => t.dueDate)
@@ -149,10 +181,13 @@ export function WeeklyAgenda() {
     ...resumeItems,
     ...recommendationItems,
     ...taskItems,
+    ...requestItems,
   ];
   const overdue = items.filter((i) => i.date && i.date < today && !NOT_OVERDUE.has(i.kind));
   const renderItem = (item: AgendaItem, withDate = false) =>
-    item.task ? (
+    item.request ? (
+      <RequestRow request={item.request} clientName={clientNames.get(item.request.clientId)} />
+    ) : item.task ? (
       <TaskRow
         task={item.task}
         clientName={item.clientId ? clientNames.get(item.clientId) : undefined}
@@ -177,6 +212,25 @@ export function WeeklyAgenda() {
       description="Revisiones, pendientes, tareas y bloques agendados en un solo lugar."
     >
       <QuickCapture clients={clients} />
+      {!!requestInbox.length && (
+        <details className="mb-5 rounded-lg border p-3" open={freshRequests > 0}>
+          <summary className="cursor-pointer text-sm font-medium">
+            Pedidos de asesores · {requestInbox.length}
+            {freshRequests > 0 && (
+              <span className="ml-2 align-middle">
+                <NewBadge />
+              </span>
+            )}
+          </summary>
+          <ul className="mt-3 space-y-3">
+            {requestInbox.map((r) => (
+              <li key={r.id} className="flex text-sm">
+                <RequestRow request={r} clientName={clientNames.get(r.clientId)} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"

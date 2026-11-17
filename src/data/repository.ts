@@ -2,6 +2,7 @@ import type {BoardEntry,BoardInput} from '@/domain/board';
 import type {ClientPause,PauseInput} from '@/domain/pause';
 import type {Task,TaskInput,TaskStatus} from '@/domain/task';
 import type {RecommendationInput,RecommendationRecord} from '@/domain/recommendation';
+import type {AdvisorRequest,RequestInput,RequestStatus} from '@/domain/request';
 import type {ClientContext, ClientNotebook, ClientNote} from '@/domain/client-notebook';
 import type { ZodError, ZodTypeAny, z } from "zod";
 
@@ -56,6 +57,17 @@ export interface AgendaRepository {
   setTaskStatus(id:string, status:TaskStatus, expectedUpdatedAt:string):Promise<Task>;
   listRecommendationRecords():Promise<RecommendationRecord[]>;
   saveRecommendationState(input:RecommendationInput):Promise<RecommendationRecord>;
+  /** Pedidos de asesores. Clientes elegibles: solo número y nombre (el asesor no lee la ficha). */
+  listRequestClients():Promise<{id:string;name:string}[]>;
+  /** El owner ve todos; un asesor, solo los que escribió él (lo filtra la base). */
+  listRequests():Promise<AdvisorRequest[]>;
+  /** Autor, fecha y estado inicial los fija la base. */
+  createRequest(input:RequestInput):Promise<AdvisorRequest>;
+  /** Solo owner y solo pedidos puntuales. Al cambiar de estado deja de ser "Nuevo". */
+  setRequestStatus(id:string, status:RequestStatus, expectedUpdatedAt:string):Promise<AdvisorRequest>;
+  markRequestSeen(id:string, expectedUpdatedAt:string):Promise<AdvisorRequest>;
+  /** Indicación vigente → ya no aplica (owner o su autor). */
+  retireIndication(id:string):Promise<AdvisorRequest>;
   listAdvisors(): Promise<Advisor[]>;
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;

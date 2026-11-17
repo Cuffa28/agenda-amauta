@@ -11,12 +11,12 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import { GoogleSessionGuard } from "@/integrations/google/GoogleConnection";
-import { AuthGate } from "@/components/AuthGate";
+import { AuthGate, RoleSwitch, useAgendaRole } from "@/components/AuthGate";
+import { AdvisorPortal } from "@/components/AdvisorPortal";
 import { AppShell } from "@/components/layout/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
-
 
 function NotFoundComponent() {
   return (
@@ -24,9 +24,7 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Página no encontrada</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          La página que buscás no existe.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">La página que buscás no existe.</p>
         <div className="mt-6">
           <Link
             to="/"
@@ -43,7 +41,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
-
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -124,17 +121,27 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// El asesor ve solo esta pantalla, sin menú ni rutas de la agenda.
+function AdvisorScreen() {
+  const { email, signOut } = useAgendaRole();
+  return <AdvisorPortal email={email} {...(signOut ? { onSignOut: signOut } : {})} />;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <GoogleSessionGuard/><AuthGate><AppShell>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-      </AppShell></AuthGate>
+      <GoogleSessionGuard />
+      <AuthGate>
+        <RoleSwitch advisor={<AdvisorScreen />}>
+          <AppShell>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+          </AppShell>
+        </RoleSwitch>
+      </AuthGate>
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
 }
-

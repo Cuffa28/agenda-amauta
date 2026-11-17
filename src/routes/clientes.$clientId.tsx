@@ -6,6 +6,7 @@ import {
 } from "@/components/BoardProgress";
 import { RecommendationTracker } from "@/components/RecommendationTracker";
 import { ClientTasks } from "@/components/Tasks";
+import { ClientRequests } from "@/components/Requests";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
@@ -34,6 +35,7 @@ import {
   draftsQuery,
   boardQuery,
   tasksQuery,
+  requestsQuery,
 } from "@/data/queries";
 import { portfolioMonthStatus } from "@/domain/coverage";
 import { currentMonthInBuenosAires, todayInBuenosAires } from "@/domain/dates";
@@ -58,6 +60,7 @@ function ClientPage() {
     { data: drafts },
     { data: entries },
     { data: tasks },
+    { data: requests },
   ] = useSuspenseQueries({
     queries: [
       clientsQuery(),
@@ -69,6 +72,7 @@ function ClientPage() {
       draftsQuery(clientId),
       boardQuery(month),
       tasksQuery(),
+      requestsQuery(),
     ],
   });
   const { move, change, dialog } = useStageChange(month);
@@ -111,6 +115,7 @@ function ClientPage() {
         <a href="#mi-agenda">Agendar</a>
         <a href="#tareas">Tareas</a>
       </nav>
+      <ClientRequests clientId={clientId} requests={requests} />
       {client.liquidityNote && (
         <SectionCard title="Mandato del cliente">
           <p>{client.liquidityNote}</p>

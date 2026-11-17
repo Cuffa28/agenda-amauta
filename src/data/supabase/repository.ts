@@ -7,6 +7,7 @@ import { BA_TZ, todayInBuenosAires } from '@/domain/dates';
 import { isPauseActive, pauseInputSchema, type ClientPause } from '@/domain/pause';
 import { taskDateSchema, taskInputSchema, TASK_STATUSES, type Task, type TaskStatus } from '@/domain/task';
 import { recommendationInputSchema, type RecommendationRecord } from '@/domain/recommendation';
+import { PEDIDO_STATUSES, requestInputSchema, type AdvisorRequest } from '@/domain/request';
 import { z } from 'zod';
 import { clientUpdateSchema, decisionSchema, emailDraftInputSchema, followUpInputSchema, marketViewVersionInputSchema, monthSchema, pendingInputSchema, positionSchema, reviewSchema, type Review, type PendingItem, type EmailDraft, type FollowUp, type Position } from '@/domain/schemas';
 import { parseOrThrow, RepositoryRuleError, type AgendaRepository } from '../repository';
@@ -16,6 +17,8 @@ import { advisorId, decode, mapAdvisors, mapClient, mapMarket, mapPosition, mapR
 const TASK_STATUS_DB: Record<TaskStatus, string> = { abierta: 'open', hecha: 'done', quitada: 'cancelled' };
 const mapTask = (r: DbRow): Task => ({ id: r['id'], title: r['title'], dueDate: r['due_at'] ? String(r['due_at']).slice(0, 10) : null, clientId: r['client_id'] ?? null, status: r['status'] === 'done' ? 'hecha' : r['status'] === 'cancelled' ? 'quitada' : 'abierta', createdAt: r['created_at'], updatedAt: r['updated_at'], closedAt: r['completed_at'] ?? null });
 const mapRecommendation = (r: DbRow): RecommendationRecord => { const s = r['source_snapshot']; return { id: r['id'], reviewId: s.reviewId, clientId: r['client_id'], state: s.state, on: s.on, note: s.note || '', updatedAt: r['updated_at'], history: s.history || [] }; };
+const MISSING_TABLE = new Set(['PGRST205', '42P01']);
+const mapRequest = (r: DbRow): AdvisorRequest => ({ id: r['id'], clientId: r['client_id'], kind: r['kind'], body: r['body'], desiredDate: r['desired_date'] ?? null, authorEmail: r['author_email'], status: r['status'], seenAt: r['seen_at'] ?? null, createdAt: r['created_at'], updatedAt: r['updated_at'], history: r['status_history'] || [] });
 const mapPause = (r: DbRow): ClientPause => { const s = r['source_snapshot']; return { id: r['id'], clientId: s.clientId, since: s.since, until: s.until ?? null, endedOn: s.endedOn ?? null, updatedAt: r['updated_at'], history: s.history || [] }; };
 
 // Se usan exclusivamente agenda_*; nunca tablas de CRM ni claves privilegiadas.
@@ -88,6 +91,32 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const s=old['source_snapshot'];
       const payload={source_snapshot:{...s,endedOn:today,history:[...(s.history||[]),{action:'retoma',on:today,at:new Date().toISOString()}]}};
       return mapPause(await update('agenda_drafts',id,payload,old['updated_at']));
+    },
+    async listRequestClients() {
+      const { data, error } = await db().rpc('agenda_my_clients'); if (error) throw error;
+      return ((data || []) as DbRow[]).map(r => ({ id: r['id'], name: r['name'] }));
+    },
+    async listRequests() {
+      // Mientras la tabla no exista (cambio de base pendiente) no se rompe la agenda.
+      const { data, error } = await db().from('agenda_requests').select('*');
+      if (error) { if (MISSING_TABLE.has(String(error.code))) return []; throw error; }
+      return ((data || []) as DbRow[]).map(mapRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    async createRequest(input) {
+      const p = parseOrThrow(requestInputSchema, input);
+      return mapRequest(await insert('agenda_requests', { client_id: p.clientId, kind: p.kind, body: p.body, desired_date: p.desiredDate }));
+    },
+    async setRequestStatus(id, status, expected) {
+      const s = parseOrThrow(z.enum(PEDIDO_STATUSES), status);
+      return mapRequest(await update('agenda_requests', id, { status: s, seen_at: new Date().toISOString() }, expected));
+    },
+    async markRequestSeen(id, expected) {
+      return mapRequest(await update('agenda_requests', id, { seen_at: new Date().toISOString() }, expected));
+    },
+    async retireIndication(id) {
+      const { data, error } = await db().rpc('agenda_retire_indication', { p_id: id }); if (error) throw error;
+      const row = ((data || []) as DbRow[])[0]; if (!row) throw new RepositoryRuleError('La indicación ya no estaba vigente.');
+      return mapRequest(row);
     },
     async listTasks() {
       return (await rows('agenda_tasks')).filter(r => decode(r['notes'])['kind'] === 'task').map(mapTask);

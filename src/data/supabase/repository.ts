@@ -1,3 +1,4 @@
+import {boardInputSchema} from '@/domain/board';
 import {clientContextSchema,clientNoteSchema,emptyContext} from '@/domain/client-notebook';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describeDecision } from '@/domain/decision';
@@ -41,6 +42,20 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
   };
   return {
     mode: 'supabase',
+    async listBoardEntries(month) {
+      parseOrThrow(monthSchema,month);
+      return (await rows('agenda_drafts',undefined,'client_board')).filter(r=>r['source_snapshot'].month===month).map(r=>({...r['source_snapshot'],id:r['id'],updatedAt:r['updated_at']}));
+    },
+    async moveBoardEntry(input) {
+      const p=parseOrThrow(boardInputSchema,input);await findClient(p.clientId);
+      const id=await stableUuid(`agenda-board:${p.clientId}:${p.month}`);
+      const old=(await rows('agenda_drafts',p.clientId,'client_board')).find(r=>r['id']===id);
+      if(old?.['updated_at']!==p.expectedUpdatedAt)throw new RepositoryRuleError('La tarjeta cambió en otra sesión. Recargá el tablero antes de moverla.');
+      const history=[...(old?.['source_snapshot'].history||[]),{stage:p.stage,at:new Date().toISOString()}];
+      const payload={client_id:p.clientId,subject:'Avance de revisión mensual',body:'',source_snapshot:{kind:'client_board',clientId:p.clientId,month:p.month,stage:p.stage,history}};
+      const row=old?await update('agenda_drafts',id,payload,p.expectedUpdatedAt):await insert('agenda_drafts',{...payload,id});
+      return {...row['source_snapshot'],id,updatedAt:row['updated_at']};
+    },
     async getClientNotebook(clientId) {
       const all = await rows('agenda_drafts', clientId);
       const context = all.find(r=>r['source_snapshot']?.kind==='client_context');

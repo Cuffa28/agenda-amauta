@@ -202,3 +202,16 @@ it('cierra una recomendación rápida sin inventar fundamentos ni exigir una not
  expect(pending.reviewId).toBe(r.id);expect(d.tables['agenda_tasks']![0].review_id).toBeNull();
  expect(portfolioMonthStatus((await reopened.listClients())[0]!,'2026-11',await reopened.listReviews(),await reopened.listPendings(),'2026-11-16').countsAsReviewed).toBe(true);
 });
+
+it('mueve tarjetas con historial, persiste al recargar y rechaza escrituras de otra sesión',async()=>{
+ const d=database(),repo=createSupabaseRepository(()=>d.client),clientId='0000-00';
+ const first=await repo.moveBoardEntry({clientId,month:'2026-11',stage:'en_revision'});
+ const reopened=createSupabaseRepository(()=>d.client);
+ expect((await reopened.listBoardEntries('2026-11'))[0]?.stage).toBe('en_revision');
+ const second=await reopened.moveBoardEntry({clientId,month:'2026-11',stage:'revisada',expectedUpdatedAt:first.updatedAt});
+ expect(second.history.map(h=>h.stage)).toEqual(['en_revision','revisada']);
+ await expect(repo.moveBoardEntry({clientId,month:'2026-11',stage:'pausada',expectedUpdatedAt:first.updatedAt})).rejects.toThrow('otra sesión');
+ expect(await repo.listBoardEntries('2026-12')).toEqual([]);
+ expect(await repo.listReviews(clientId)).toEqual([]);expect(await repo.listEmailDrafts(clientId)).toEqual([]);
+ expect(d.tables['agenda_tasks']).toHaveLength(0);
+});

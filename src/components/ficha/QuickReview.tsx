@@ -1,3 +1,4 @@
+import { BOARD_LABELS, type BoardStage } from "@/domain/board";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { SectionCard } from "@/components/PageHeader";
@@ -13,10 +14,12 @@ export function QuickReview({
   clientId,
   month,
   review,
+  progress,
 }: {
   clientId: string;
   month: string;
   review: Review | null;
+  progress?: BoardStage;
 }) {
   const queryClient = useQueryClient();
   const [choice, setChoice] = useState<"mantener" | "proponer_cambio" | null>(
@@ -70,7 +73,8 @@ export function QuickReview({
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Sin revisar{review?.analysis ? " · tenés notas de trabajo guardadas" : ""}
+            {progress ? BOARD_LABELS[progress] : "Sin revisar"}
+            {review?.analysis ? " · tenés notas de trabajo guardadas" : ""}
           </p>
           <div role="group" aria-label="Resultado de mi revisión" className="flex flex-wrap gap-2">
             {(["mantener", "proponer_cambio"] as const).map((type) => (

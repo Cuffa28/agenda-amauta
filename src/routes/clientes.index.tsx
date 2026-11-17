@@ -1,3 +1,7 @@
+import { PortfolioBoard } from "@/components/PortfolioBoard";
+import { Button } from "@/components/ui/button";
+import { boardStage, BOARD_LABELS } from "@/domain/board";
+import { BoardStageSelect, useBoardMove } from "@/components/BoardProgress";
 import { DECISION_LABELS } from "@/domain/decision";
 import { InitialsAvatar } from "@/components/AmautaBrand";
 import { useSuspenseQueries } from "@tanstack/react-query";
@@ -24,7 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { advisorsQuery, clientsQuery, pendingsQuery, reviewsQuery } from "@/data/queries";
+import {
+  advisorsQuery,
+  clientsQuery,
+  pendingsQuery,
+  reviewsQuery,
+  boardQuery,
+} from "@/data/queries";
 import { portfolioMonthStatus } from "@/domain/coverage";
 import {
   currentMonthInBuenosAires,
@@ -61,10 +71,17 @@ function ClientesPage() {
   const navigate = useNavigate({ from: "/clientes/" });
   const month = mes ?? currentMonthInBuenosAires();
   const today = todayInBuenosAires();
-  const [{ data: clients }, { data: advisors }, { data: reviews }, { data: pendings }] =
-    useSuspenseQueries({
-      queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery()],
-    });
+  const [
+    { data: clients },
+    { data: advisors },
+    { data: reviews },
+    { data: pendings },
+    { data: entries },
+  ] = useSuspenseQueries({
+    queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery(), boardQuery(month)],
+  });
+  const [view, setView] = useState<"tablero" | "lista">("tablero");
+  const move = useBoardMove(month);
   const [q, setQ] = useState("");
   const [segment, setSegment] = useState(ALL);
   const [advisorId, setAdvisorId] = useState(ALL);
@@ -74,20 +91,29 @@ function ClientesPage() {
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return clients
-      .map((c) => ({ client: c, status: portfolioMonthStatus(c, month, reviews, pendings, today) }))
+      .map((c) => ({
+        client: c,
+        status: portfolioMonthStatus(c, month, reviews, pendings, today, entries),
+      }))
       .filter(({ client, status: s }) => {
         if (needle && !client.id.includes(needle) && !client.name.toLowerCase().includes(needle))
           return false;
         if (segment !== ALL && client.segment !== segment) return false;
         if (advisorId !== ALL && client.advisorId !== advisorId) return false;
+        const stage = boardStage(
+          s.review,
+          entries.find((e) => e.clientId === client.id),
+        );
+        if (status.startsWith("stage:") && stage !== status.slice(6)) return false;
         if (
           status !== ALL &&
+          !status.startsWith("stage:") &&
           (s.review?.status === "cerrada" ? s.review.decision?.type : "sin_revisar") !== status
         )
           return false;
         return true;
       });
-  }, [clients, reviews, pendings, month, today, q, segment, advisorId, status]);
+  }, [clients, reviews, pendings, entries, month, today, q, segment, advisorId, status]);
 
   return (
     <>
@@ -141,7 +167,11 @@ function ClientesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todos los estados</SelectItem>
-            <SelectItem value="sin_revisar">Sin revisar</SelectItem>
+            {Object.entries(BOARD_LABELS).map(([key, label]) => (
+              <SelectItem key={key} value={"stage:" + key}>
+                {label}
+              </SelectItem>
+            ))}
             <SelectItem value="mantener">Mantener</SelectItem>
             <SelectItem value="proponer_cambio">Recomiendo cambio</SelectItem>
             <SelectItem value="falta_informacion">Falta información</SelectItem>
@@ -149,85 +179,140 @@ function ClientesPage() {
         </Select>
       </div>
 
-      <div className="surface-card overflow-x-auto">
-        <Table className="client-table">
-          <TableHeader className="bg-table-head">
-            <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Segmento</TableHead>
-              <TableHead className="hidden lg:table-cell">Sector</TableHead>
-              <TableHead className="hidden md:table-cell">Asesor</TableHead>
-              <TableHead>Revisión del mes</TableHead>
-              <TableHead>Fecha</TableHead>
-              <TableHead className="hidden text-right sm:table-cell">Pend.</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ client, status: s }) => (
-              <TableRow key={client.id}>
-                <TableCell>
-                  <div className="client-name-cell">
-                    <InitialsAvatar name={client.name} />
-                    <div>
-                      <Link
-                        to="/clientes/$clientId"
-                        params={{ clientId: client.id }}
-                        search={{ mes: month }}
-                        className="font-medium text-foreground hover:text-accent-foreground hover:underline"
-                      >
-                        {client.name}
-                      </Link>
-                      <div className="client-id-label">{client.id}</div>
-                      {client.isDemo && (
-                        <span className="ml-2 align-middle">
-                          <DemoBadge />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span className={`segment-tag segment-${client.segment}`}>{client.segment}</span>
-                </TableCell>
-                <TableCell className="hidden text-muted-foreground lg:table-cell">
-                  {client.sector ?? "—"}
-                </TableCell>
-                <TableCell className="hidden text-muted-foreground md:table-cell">
-                  {advisorById.get(client.advisorId)?.name}
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={
-                      s.review?.status === "cerrada"
-                        ? s.review.decision?.type === "mantener"
-                          ? "text-emerald-700 font-medium"
-                          : "text-amber-700 font-medium"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    {s.review?.status === "cerrada" && s.review.decision
-                      ? DECISION_LABELS[s.review.decision.type]
-                      : "Sin revisar"}
-                  </span>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {s.review?.closedAt ? formatDate(s.review.closedAt.slice(0, 10)) : "—"}
-                </TableCell>
-                <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
-                  {s.openPendings.length || "—"}
-                </TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  Ningún cliente coincide con los filtros.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+      <div className="mb-4 flex gap-2" role="group" aria-label="Vista de carteras">
+        <Button
+          size="sm"
+          variant={view === "tablero" ? "default" : "outline"}
+          aria-pressed={view === "tablero"}
+          onClick={() => setView("tablero")}
+        >
+          Tablero
+        </Button>
+        <Button
+          size="sm"
+          variant={view === "lista" ? "default" : "outline"}
+          aria-pressed={view === "lista"}
+          onClick={() => setView("lista")}
+        >
+          Lista
+        </Button>
       </div>
+      {view === "tablero" ? (
+        <PortfolioBoard
+          clients={rows.map((r) => r.client)}
+          advisors={advisors}
+          reviews={reviews}
+          entries={entries}
+          month={month}
+        />
+      ) : (
+        <>
+          {move.error && (
+            <p role="alert" className="text-sm text-destructive">
+              {move.error.message}
+            </p>
+          )}
+          <div className="surface-card overflow-x-auto">
+            <Table className="client-table">
+              <TableHeader className="bg-table-head">
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Segmento</TableHead>
+                  <TableHead className="hidden lg:table-cell">Sector</TableHead>
+                  <TableHead className="hidden md:table-cell">Asesor</TableHead>
+                  <TableHead>Avance</TableHead>
+                  <TableHead>Recomendación</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Pend.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map(({ client, status: s }) => (
+                  <TableRow key={client.id}>
+                    <TableCell>
+                      <div className="client-name-cell">
+                        <InitialsAvatar name={client.name} />
+                        <div>
+                          <Link
+                            to="/clientes/$clientId"
+                            params={{ clientId: client.id }}
+                            search={{ mes: month }}
+                            className="font-medium text-foreground hover:text-accent-foreground hover:underline"
+                          >
+                            {client.name}
+                          </Link>
+                          <div className="client-id-label">{client.id}</div>
+                          {client.isDemo && (
+                            <span className="ml-2 align-middle">
+                              <DemoBadge />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`segment-tag segment-${client.segment}`}>
+                        {client.segment}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
+                      {client.sector ?? "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                      {advisorById.get(client.advisorId)?.name}
+                    </TableCell>
+                    <TableCell>
+                      <BoardStageSelect
+                        value={boardStage(
+                          s.review,
+                          entries.find((e) => e.clientId === client.id),
+                        )}
+                        disabled={move.isPending}
+                        label={"Estado de " + client.name}
+                        onChange={(stage) =>
+                          move.mutate({
+                            clientId: client.id,
+                            stage,
+                            entry: entries.find((e) => e.clientId === client.id),
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={
+                          s.review?.status === "cerrada"
+                            ? s.review.decision?.type === "mantener"
+                              ? "text-emerald-700 font-medium"
+                              : "text-amber-700 font-medium"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {s.review?.status === "cerrada" && s.review.decision
+                          ? DECISION_LABELS[s.review.decision.type]
+                          : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {s.review?.closedAt ? formatDate(s.review.closedAt.slice(0, 10)) : "—"}
+                    </TableCell>
+                    <TableCell className="hidden text-right font-mono tabular-nums sm:table-cell">
+                      {s.openPendings.length || "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                      Ningún cliente coincide con los filtros.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
     </>
   );
 }

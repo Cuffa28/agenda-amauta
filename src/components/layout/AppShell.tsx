@@ -10,7 +10,7 @@ const NAV = [
   { to: '/', label: 'Mi agenda', icon: LayoutDashboard, exact: true },
   { to: '/clientes', label: 'Carteras', icon: UsersRound, exact: false },
   { to: '/vision-mercado', label: 'Visión de mercado', icon: LineChart, exact: false },
-  { to: '/seguimientos', label: 'Seguimientos', icon: CalendarClock, exact: false },
+  { to: '/seguimientos', label: 'Mi semana', icon: CalendarClock, exact: false },
   { to: '/configuracion', label: 'Conexiones', icon: Settings2, exact: false },
 ] as const;
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {

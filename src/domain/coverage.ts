@@ -1,3 +1,4 @@
+import { boardStage, type BoardEntry } from "./board";
 import { addDays, daysInMonth, diffInDays } from "./dates";
 import type { Client, PendingItem, Review } from "./schemas";
 
@@ -9,6 +10,7 @@ export function dueDateForMonth(reviewDay: number, month: string): string {
 }
 
 export type PortfolioStatus =
+  | "pausada"
   | "revisada"
   | "revisada_con_pendiente"
   | "en_curso"
@@ -36,19 +38,24 @@ export function portfolioMonthStatus(
   reviews: Review[],
   pendings: PendingItem[],
   today: string,
+  entries: BoardEntry[] = [],
 ): PortfolioMonthStatus {
   const dueDate = dueDateForMonth(client.reviewDay, month);
   const review = reviews.find((r) => r.clientId === client.id && r.month === month) ?? null;
   const openPendings = review
     ? pendings.filter((p) => p.reviewId === review.id && p.status === "abierto")
     : [];
-  const closed = review?.status === "cerrada";
-  const isOverdue = !!dueDate && !closed && dueDate < today;
-  const isDueToday = !closed && dueDate === today;
+  const entry = entries.find((e) => e.clientId === client.id && e.month === month);
+  const stage = boardStage(review, entry);
+  const closed = stage === "revisada";
+  const paused = stage === "pausada";
+  const isOverdue = !!dueDate && !closed && !paused && dueDate < today;
+  const isDueToday = !closed && !paused && dueDate === today;
 
   let status: PortfolioStatus;
-  if (closed) status = openPendings.length > 0 ? "revisada_con_pendiente" : "revisada";
-  else if (review) status = "en_curso";
+  if (paused) status = "pausada";
+  else if (closed) status = openPendings.length > 0 ? "revisada_con_pendiente" : "revisada";
+  else if (stage === "en_revision") status = "en_curso";
   else if (isOverdue) status = "atrasada";
   else if (isDueToday) status = "vence_hoy";
   else status = dueDate ? "programada" : "sin_programar";
@@ -85,8 +92,11 @@ export function summarizeMonth(
   pendings: PendingItem[],
   month: string,
   today: string,
+  entries: BoardEntry[] = [],
 ): MonthSummary {
-  const statuses = clients.map((c) => portfolioMonthStatus(c, month, reviews, pendings, today));
+  const statuses = clients.map((c) =>
+    portfolioMonthStatus(c, month, reviews, pendings, today, entries),
+  );
   const reviewed = statuses.filter((s) => s.countsAsReviewed).length;
   const byDue = (a: PortfolioMonthStatus, b: PortfolioMonthStatus) =>
     a.dueDate.localeCompare(b.dueDate) || a.clientId.localeCompare(b.clientId);
@@ -131,4 +141,3 @@ export function rankOpenPendings(pendings: PendingItem[], today: string) {
   for (const item of items) counts[item.urgency] += 1;
   return { items, counts };
 }
-

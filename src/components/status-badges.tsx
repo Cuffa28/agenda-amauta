@@ -4,6 +4,7 @@ import type { PortfolioStatus, Urgency } from "@/domain/coverage";
 type Variant = NonNullable<BadgeProps["variant"]>;
 
 const PORTFOLIO: Record<PortfolioStatus, { label: string; variant: Variant }> = {
+  pausada: {label:"Pausada",variant:"outline"},
   revisada: { label: "Revisada", variant: "success" },
   revisada_con_pendiente: { label: "Revisada · pendiente abierto", variant: "info" },
   en_curso: { label: "En curso", variant: "muted" },

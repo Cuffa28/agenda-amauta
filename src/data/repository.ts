@@ -1,3 +1,4 @@
+import type {BoardEntry,BoardInput} from '@/domain/board';
 import type {ClientContext, ClientNotebook, ClientNote} from '@/domain/client-notebook';
 import type { ZodError, ZodTypeAny, z } from "zod";
 
@@ -37,6 +38,8 @@ export interface AgendaRepository {
   getClientNotebook(clientId:string):Promise<ClientNotebook>;
   saveClientContext(clientId:string, context:ClientContext, expectedUpdatedAt?:string):Promise<ClientNotebook>;
   addClientNote(clientId:string, note:Pick<ClientNote,'body'|'source'>):Promise<ClientNote>;
+  listBoardEntries(month:string):Promise<BoardEntry[]>;
+  moveBoardEntry(input:BoardInput):Promise<BoardEntry>;
   listAdvisors(): Promise<Advisor[]>;
   listClients(): Promise<Client[]>;
   updateClient(id: string, patch: ClientUpdate): Promise<Client>;

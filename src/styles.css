@@ -357,3 +357,9 @@ summary:hover { color: #353431; }
 @media (max-width: 600px) { .login-story .amauta-brand { width: 205px; } }
 
 @media (max-width: 600px) { .workflow-nav { grid-template-columns: repeat(2,minmax(0,1fr)); } .workflow-nav a:last-child { grid-column: 1 / -1; } }
+
+/* Tablero: cuatro columnas compactas y desplazamiento horizontal en pantallas pequeñas. */
+.portfolio-board{display:grid;grid-template-columns:repeat(4,minmax(245px,1fr));gap:16px;overflow-x:auto;align-items:start;padding-bottom:12px}
+.board-column{min-height:280px;max-height:72vh;overflow-y:auto;border:1px solid #e5e5df;border-radius:16px;background:#f1f1ec;padding:14px;transition:background .15s,border-color .15s}
+.board-column-over{background:#fff9d8;border-color:#c6aa00}
+.board-card{border:1px solid #e5e5df;border-radius:12px;background:white;padding:14px;box-shadow:0 2px 5px #231f2005}

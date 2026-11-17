@@ -10,7 +10,7 @@ import { PortfolioStatusBadge, UrgencyBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { advisorsQuery, clientsQuery, pendingsQuery, reviewsQuery } from "@/data/queries";
+import { advisorsQuery, clientsQuery, pendingsQuery, reviewsQuery,boardQuery } from "@/data/queries";
 import { rankOpenPendings, summarizeMonth, URGENCY_ORDER, type PortfolioMonthStatus } from "@/domain/coverage";
 import {
   currentMonthInBuenosAires,
@@ -44,14 +44,14 @@ function ResumenPage() {
   const navigate = useNavigate({ from: "/" });
   const month = mes ?? currentMonthInBuenosAires();
   const today = todayInBuenosAires();
-  const [{ data: clients }, { data: advisors }, { data: reviews }, { data: pendings }] = useSuspenseQueries({
-    queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery()],
+  const [{ data: clients }, { data: advisors }, { data: reviews }, { data: pendings },{data:entries}] = useSuspenseQueries({
+    queries: [clientsQuery(), advisorsQuery(), reviewsQuery(), pendingsQuery(),boardQuery(month)],
   });
   const [showAllPendings, setShowAllPendings] = useState(false);
 
   const summary = useMemo(
-    () => summarizeMonth(clients, reviews, pendings, month, today),
-    [clients, reviews, pendings, month, today],
+    () => summarizeMonth(clients, reviews, pendings, month, today,entries),
+    [clients, reviews, pendings, month, today,entries],
   );
   const ranked = useMemo(() => rankOpenPendings(pendings, today), [pendings, today]);
   const clientById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
@@ -77,7 +77,7 @@ function ResumenPage() {
 
   const setMonth = (m: string) => navigate({ search: { mes: m } });
   const priority = (s: PortfolioMonthStatus) => s.status === 'en_curso' ? 0 : s.isOverdue ? 1 : s.isDueToday ? 2 : 3;
-  const nextReview = summary.statuses.filter(s => !s.countsAsReviewed).sort((a,b) => priority(a)-priority(b) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.clientId.localeCompare(b.clientId))[0];
+  const nextReview = summary.statuses.filter(s => !s.countsAsReviewed && s.status!=='pausada').sort((a,b) => priority(a)-priority(b) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.clientId.localeCompare(b.clientId))[0];
   const remaining = summary.total-summary.reviewed;
 
 

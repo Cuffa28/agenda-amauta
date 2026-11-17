@@ -1,3 +1,5 @@
+import { BoardStageSelect, useBoardMove } from "@/components/BoardProgress";
+import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
 import { ClientNotebook } from "@/components/ficha/ClientNotebook";
 import { PersonalReviewSchedule } from "@/components/ficha/PersonalReviewSchedule";
@@ -23,6 +25,7 @@ import {
   pendingsQuery,
   marketViewQuery,
   draftsQuery,
+  boardQuery,
 } from "@/data/queries";
 import { portfolioMonthStatus } from "@/domain/coverage";
 import { currentMonthInBuenosAires, todayInBuenosAires } from "@/domain/dates";
@@ -45,6 +48,7 @@ function ClientPage() {
     { data: pendings },
     { data: marketView },
     { data: drafts },
+    { data: entries },
   ] = useSuspenseQueries({
     queries: [
       clientsQuery(),
@@ -54,8 +58,10 @@ function ClientPage() {
       pendingsQuery(clientId),
       marketViewQuery(),
       draftsQuery(clientId),
+      boardQuery(month),
     ],
   });
+  const move = useBoardMove(month);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const client = clients.find((c) => c.id === clientId),
     position = positions.find((p) => p.clientId === clientId) ?? null;
@@ -72,7 +78,7 @@ function ClientPage() {
   });
   if (!client) return <p>Cliente no encontrado.</p>;
   const advisor = advisors.find((a) => a.id === client.advisorId),
-    status = portfolioMonthStatus(client, month, reviews, pendings, todayInBuenosAires());
+    status = portfolioMonthStatus(client, month, reviews, pendings, todayInBuenosAires(), entries);
   const reviewPosition = review?.positionId === position?.id ? position : historical.data || null;
   const prior = reviews
     .filter(
@@ -98,12 +104,34 @@ function ClientPage() {
           <p>{client.liquidityNote}</p>
         </SectionCard>
       )}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-muted-foreground">Avance del mes</span>
+        <BoardStageSelect
+          value={boardStage(
+            review,
+            entries.find((e) => e.clientId === clientId),
+          )}
+          disabled={move.isPending}
+          onChange={(stage) =>
+            move.mutate({ clientId, stage, entry: entries.find((e) => e.clientId === clientId) })
+          }
+        />
+        {move.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {move.error.message}
+          </p>
+        )}
+      </div>
       <section id="revision" className="scroll-mt-4">
         <QuickReview
           key={clientId + month + (review?.status || "")}
           clientId={clientId}
           month={month}
           review={review}
+          progress={boardStage(
+            review,
+            entries.find((e) => e.clientId === clientId),
+          )}
         />
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-muted-foreground">

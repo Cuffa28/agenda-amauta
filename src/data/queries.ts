@@ -19,3 +19,5 @@ export const draftsQuery = (clientId?: string) =>
 export const followUpsQuery = () =>
   queryOptions({ queryKey: ["follow-ups"], queryFn: () => getRepository().listFollowUps() });
 
+
+export const boardQuery = (month:string) => queryOptions({queryKey:['board',month],queryFn:()=>getRepository().listBoardEntries(month)});

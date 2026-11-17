@@ -1,3 +1,4 @@
+import {boardInputSchema,type BoardEntry} from '@/domain/board';
 import {clientContextSchema,clientNoteSchema,emptyContext,type ClientNotebook} from '@/domain/client-notebook';
 import { describeDecision } from "@/domain/decision";
 import {
@@ -44,6 +45,7 @@ export function createMemoryRepository(
 ): AgendaRepository {
   const state = clone(dataset);
   const notebooks = new Map<string,ClientNotebook>();
+  const board = new Map<string,BoardEntry>();
   state.reviews.forEach((r) => deepFreeze(r.marketViewSnapshot));
   state.marketView.versions.forEach((v) => deepFreeze(v));
   let seq = 0;
@@ -63,6 +65,8 @@ export function createMemoryRepository(
 
   return {
     mode: "demo-memoria",
+    async listBoardEntries(month) {parseOrThrow(monthSchema,month);return clone([...board.values()].filter(e=>e.month===month));},
+    async moveBoardEntry(input) {const p=parseOrThrow(boardInputSchema,input);if(!state.clients.some(c=>c.id===p.clientId))throw new RepositoryNotFoundError('Cliente',p.clientId);const id=p.clientId+':'+p.month,old=board.get(id);if(old?.updatedAt!==p.expectedUpdatedAt)throw new RepositoryRuleError('La tarjeta cambió en otra sesión.');const at=nowIso();const next={id,clientId:p.clientId,month:p.month,stage:p.stage,updatedAt:at,history:[...(old?.history||[]),{stage:p.stage,at}]};board.set(id,next);return clone(next);},
     async getClientNotebook(id) {if(!state.clients.some(c=>c.id===id))throw new RepositoryNotFoundError('Cliente',id);return clone(notebooks.get(id)||{context:{...emptyContext},notes:[]});},
     async saveClientContext(id,context,expected) {const old=await this.getClientNotebook(id);if(old.updatedAt!==expected)throw new RepositoryRuleError('El contexto cambió en otra sesión.');const next={...old,context:parseOrThrow(clientContextSchema,context),updatedAt:nowIso()};notebooks.set(id,next);return clone(next);},
     async addClientNote(id,input) {const old=await this.getClientNotebook(id);const note={...parseOrThrow(clientNoteSchema,input),id:newId('note'),at:nowIso()};notebooks.set(id,{...old,notes:[note,...old.notes]});return clone(note);},

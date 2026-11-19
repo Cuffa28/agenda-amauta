@@ -164,3 +164,13 @@ grant select, insert, update on public.agenda_requests to authenticated;
 --   values ('nombre@amautainversiones.com', 'asesor', true);
 -- Baja: update public.agenda_access set active = false where email = '...';
 -- ============================================================================
+
+-- ============================================================================
+-- APLICADA el 2026-11-19 (migración agenda_asesor_todos_los_clientes):
+-- agenda_access.all_clients (boolean, default false). Si es true, el asesor ve
+-- todos los clientes activos en su pantalla de pedidos (solo número y nombre).
+-- agenda_advisor_can_see suma esa condición. No da acceso a otras tablas.
+--
+-- Altas del 2026-11-19 (rol asesor): florencia (all_clients = true), jeronimo,
+-- agustin, stefano y natalia @amautainversiones.com.
+-- ============================================================================

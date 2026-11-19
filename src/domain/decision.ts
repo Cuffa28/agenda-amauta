@@ -17,11 +17,10 @@ export const ADVISOR_VALIDATION_LABELS: Record<AdvisorValidation, string> = {
 export function describeDecision(decision: Decision): string {
   switch (decision.type) {
     case "mantener":
-      return `Mantener: ${decision.nota}`;
+      return decision.nota ? `Mantener: ${decision.nota}` : "Mantener";
     case "proponer_cambio":
       return `Proponer un cambio: ${decision.propuesta} (${ADVISOR_VALIDATION_LABELS[decision.validacionAsesor].toLowerCase()})`;
     case "falta_informacion":
       return `Falta información: ${decision.informacionFaltante} (límite ${formatDate(decision.fechaLimite)})`;
   }
 }
-

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { QuickReview } from "@/components/ficha/QuickReview";
-import { ClientNotebook } from "@/components/ficha/ClientNotebook";
+import { ClientContextCard, ClientNotes } from "@/components/ficha/ClientNotebook";
 import { PositionCard } from "@/components/ficha/PositionCard";
 import {
   BoardStageSelect,
@@ -281,7 +281,8 @@ export function PortfolioBoard({
                   )}
                 />
                 <RecommendationTracker review={reviewsByClient.get(selectedClient.id)} />
-                <ClientNotebook clientId={selectedClient.id} />
+                <ClientContextCard client={selectedClient} />
+                <ClientNotes clientId={selectedClient.id} />
                 <details>
                   <summary className="cursor-pointer text-sm">Ver cartera y PDF</summary>
                   <BoardPosition clientId={selectedClient.id} />

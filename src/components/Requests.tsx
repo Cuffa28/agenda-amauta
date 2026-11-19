@@ -138,7 +138,13 @@ export function RequestRow({
   );
 }
 
-/** Ficha: indicaciones vigentes arriba, pedidos abiertos y, plegado, lo cerrado. */
+/** Vigentes: se muestran en el Contexto del cliente. */
+export const vigentIndications = (requests: AdvisorRequest[], clientId: string) =>
+  requests.filter(
+    (r) => r.clientId === clientId && r.kind === "indicacion" && r.status === "vigente",
+  );
+
+/** Ficha: pedidos abiertos del asesor y, plegado, lo cerrado. Las indicaciones vigentes van al Contexto. */
 export function ClientRequests({
   clientId,
   requests,
@@ -146,18 +152,17 @@ export function ClientRequests({
   clientId: string;
   requests: AdvisorRequest[];
 }) {
-  const mine = requests.filter((r) => r.clientId === clientId);
-  if (!mine.length) return null;
-  const indications = mine.filter((r) => r.kind === "indicacion" && r.status === "vigente");
-  const open = mine.filter(
-    (r) => r.kind === "pedido" && (r.status === "recibido" || r.status === "en_curso"),
+  const mine = requests.filter(
+    (r) => r.clientId === clientId && !(r.kind === "indicacion" && r.status === "vigente"),
   );
-  const closed = mine.filter((r) => !indications.includes(r) && !open.includes(r));
+  if (!mine.length) return null;
+  const open = mine.filter((r) => r.status === "recibido" || r.status === "en_curso");
+  const closed = mine.filter((r) => !open.includes(r));
   const fresh = mine.filter(isNewRequest).length;
   return (
     <section id="pedidos" className="surface-card scroll-mt-4 p-4">
       <h2 className="text-sm font-medium">
-        Pedidos e indicaciones del asesor
+        Pedidos del asesor{open.length ? ` · ${open.length} abiertos` : ""}
         {fresh > 0 && (
           <span className="ml-2 align-middle">
             <NewBadge />
@@ -165,17 +170,10 @@ export function ClientRequests({
         )}
       </h2>
       <div className="mt-3 grid gap-4">
-        {indications.length > 0 && (
-          <div className="grid gap-3 border-l-2 border-amber-400 pl-3">
-            {indications.map((r) => (
-              <RequestRow key={r.id} request={r} showClient={false} />
-            ))}
-          </div>
-        )}
         {open.map((r) => (
           <RequestRow key={r.id} request={r} showClient={false} />
         ))}
-        {indications.length + open.length === 0 && (
+        {open.length === 0 && (
           <p className="text-sm text-muted-foreground">No hay pedidos abiertos.</p>
         )}
         {closed.length > 0 && (

@@ -6,10 +6,10 @@ import {
 } from "@/components/BoardProgress";
 import { RecommendationTracker } from "@/components/RecommendationTracker";
 import { ClientTasks } from "@/components/Tasks";
-import { ClientRequests } from "@/components/Requests";
+import { ClientRequests, vigentIndications } from "@/components/Requests";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
-import { ClientNotebook } from "@/components/ficha/ClientNotebook";
+import { ClientContextCard, ClientNotes } from "@/components/ficha/ClientNotebook";
 import { PersonalReviewSchedule } from "@/components/ficha/PersonalReviewSchedule";
 import { useState } from "react";
 import { useQuery, useSuspenseQueries } from "@tanstack/react-query";
@@ -21,7 +21,7 @@ import { PositionHistory } from "@/components/ficha/PositionHistory";
 import { ClientHeader } from "@/components/ficha/ClientHeader";
 import { PositionEditor } from "@/components/ficha/PositionEditor";
 import { PositionCard } from "@/components/ficha/PositionCard";
-import { DetailedReviewPanel } from "@/components/ficha/ReviewPanel";
+import { ReviewSources } from "@/components/ficha/ReviewPanel";
 import { PendingsPanel } from "@/components/ficha/PendingsPanel";
 import { EmailDraftPanel } from "@/components/ficha/EmailDraftPanel";
 import { SectionCard } from "@/components/PageHeader";
@@ -38,7 +38,12 @@ import {
   requestsQuery,
 } from "@/data/queries";
 import { portfolioMonthStatus } from "@/domain/coverage";
-import { currentMonthInBuenosAires, todayInBuenosAires } from "@/domain/dates";
+import {
+  currentMonthInBuenosAires,
+  formatDate,
+  formatMonthLabel,
+  todayInBuenosAires,
+} from "@/domain/dates";
 import { monthSearchSchema } from "@/lib/search";
 
 export const Route = createFileRoute("/clientes/$clientId")({
@@ -109,18 +114,13 @@ function ClientPage() {
         aria-label="Secciones de la ficha"
         className="flex flex-wrap gap-4 text-sm text-muted-foreground"
       >
+        <a href="#contexto">Contexto</a>
         <a href="#revision">Mi revisión</a>
-        <a href="#contexto">Contexto y notas</a>
+        <a href="#notas">Notas</a>
+        <a href="#tareas">Tareas</a>
         <a href="#posicion">Cartera y PDF</a>
         <a href="#mi-agenda">Agendar</a>
-        <a href="#tareas">Tareas</a>
       </nav>
-      <ClientRequests clientId={clientId} requests={requests} />
-      {client.liquidityNote && (
-        <SectionCard title="Mandato del cliente">
-          <p>{client.liquidityNote}</p>
-        </SectionCard>
-      )}
       <div className="flex flex-wrap items-center gap-3">
         {dialog}
         <span className="text-sm text-muted-foreground">Avance del mes</span>
@@ -154,6 +154,10 @@ function ClientPage() {
           </p>
         )}
       </div>
+      <section id="contexto" className="scroll-mt-4">
+        <ClientContextCard client={client} indications={vigentIndications(requests, clientId)} />
+      </section>
+      <ClientRequests clientId={clientId} requests={requests} />
       <section id="revision" className="scroll-mt-4">
         <QuickReview
           key={clientId + month + (review?.status || "")}
@@ -164,54 +168,65 @@ function ClientPage() {
             review,
             entries.find((e) => e.clientId === clientId),
           )}
+          previous={previousConclusion}
         />
         <div className="mt-3">
           <RecommendationTracker review={review} />
         </div>
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-muted-foreground">
-            Análisis detallado y datos a confirmar
+            Visión de mercado y posición usadas
           </summary>
           <div className="mt-3">
-            <DetailedReviewPanel
-              clientId={clientId}
-              month={month}
-              status={status}
-              marketView={marketView}
-              position={position}
-            />
+            <ReviewSources review={review} marketView={marketView} position={position} />
           </div>
         </details>
       </section>
-      <section id="contexto">
-        <ClientNotebook clientId={clientId} />
+      <section id="notas" className="scroll-mt-4">
+        <ClientNotes clientId={clientId} />
       </section>
+      <section id="tareas" className="scroll-mt-4">
+        <ClientTasks clientId={clientId} tasks={tasks} />
+      </section>
+      <details id="pendientes" className="surface-card p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Pendientes de esta cuenta · {pendings.filter((p) => p.status === "abierto").length}
+        </summary>
+        <div className="mt-4">
+          <PendingsPanel
+            clientId={clientId}
+            review={review}
+            pendings={pendings}
+            reviewsById={new Map(reviews.map((r) => [r.id, r]))}
+            today={todayInBuenosAires()}
+          />
+        </div>
+      </details>
       <section id="mi-agenda" className="scroll-mt-4">
         <PersonalReviewSchedule key={clientId} client={client} />
       </section>
-      {previousConclusion && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-muted-foreground">Revisión anterior</summary>
-          <p className="mt-2">{previousConclusion}</p>
-        </details>
-      )}
       <details className="surface-card p-4">
-        <summary className="cursor-pointer text-sm font-medium">Historial de revisiones</summary>
-        <div className="mt-3 grid gap-3">
+        <summary className="cursor-pointer text-sm font-medium">
+          Revisiones anteriores ·{" "}
+          {reviews.filter((r) => r.status === "cerrada" && r.decision && r.month !== month).length}
+        </summary>
+        <ol className="mt-3 grid gap-4">
           {reviews
-            .filter((r) => r.status === "cerrada" && r.decision)
+            .filter((r) => r.status === "cerrada" && r.decision && r.month !== month)
+            .sort((a, b) => b.month.localeCompare(a.month))
             .map((r) => (
-              <div key={r.id} className="border-l-2 pl-3 text-sm">
+              <li key={r.id} className="border-l-2 pl-3 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  {r.closedAt?.slice(0, 10)} · {r.month}
+                  {formatMonthLabel(r.month)}
+                  {r.closedAt ? ` · cerrada el ${formatDate(r.closedAt.slice(0, 10))}` : ""}
                 </p>
-                <p>{r.decision ? describeDecision(r.decision) : ""}</p>
+                <p className="font-medium">{r.decision ? describeDecision(r.decision) : ""}</p>
                 {r.analysis && (
                   <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{r.analysis}</p>
                 )}
-              </div>
+              </li>
             ))}
-        </div>
+        </ol>
       </details>
       <section id="posicion" className="grid scroll-mt-4 gap-4">
         <PositionCard position={position} />
@@ -252,21 +267,6 @@ function ClientPage() {
           )}
         </div>
       </details>
-      <details id="pendientes" className="surface-card p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          Pendientes de esta cuenta · {pendings.filter((p) => p.status === "abierto").length}
-        </summary>
-        <div className="mt-4">
-          <PendingsPanel
-            clientId={clientId}
-            review={review}
-            pendings={pendings}
-            reviewsById={new Map(reviews.map((r) => [r.id, r]))}
-            today={todayInBuenosAires()}
-          />
-        </div>
-      </details>
-      <ClientTasks clientId={clientId} tasks={tasks} />
       {position && (
         <details
           className="surface-card p-4"

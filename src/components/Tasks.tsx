@@ -91,7 +91,7 @@ export function ClientTasks({ clientId, tasks }: { clientId: string; tasks: Task
     .filter((t) => t.status !== "abierta")
     .sort((a, b) => (b.closedAt ?? b.updatedAt).localeCompare(a.closedAt ?? a.updatedAt));
   return (
-    <details id="tareas" className="surface-card p-4" open={open.length > 0}>
+    <details className="surface-card p-4" open={open.length > 0}>
       <summary className="cursor-pointer text-sm font-medium">
         Tareas de esta cuenta · {open.length}
       </summary>

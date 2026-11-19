@@ -1,13 +1,13 @@
 -- ============================================================================
--- PROPUESTA (NO APLICADA) · Pedidos e indicaciones de asesores
--- Rama: feat/pedidos-asesores. Revisar con Codex antes de aplicar en Supabase.
+-- APLICADA el 2026-11-19 en Supabase (migración agenda_pedidos_asesores),
+-- autorizada por Facundo sin revisión previa de Codex.
+-- Pedidos e indicaciones de asesores · rama feat/pedidos-asesores (33bc2ab).
+-- Sin asesores dados de alta: agenda_access sigue con los dos owners.
 -- No toca ninguna tabla, política ni dato existente salvo el CHECK de rol de
 -- agenda_access (se amplía de 'owner' a 'owner' | 'asesor').
 -- Todas las políticas actuales exigen role = 'owner', así que un asesor sigue
 -- sin poder leer clientes, revisiones, notas, tareas, posiciones ni borradores.
 -- ============================================================================
-
-begin;
 
 -- 1. Rol asesor ---------------------------------------------------------------
 alter table public.agenda_access drop constraint agenda_access_role_check;
@@ -157,7 +157,6 @@ grant execute on function public.agenda_role(), public.agenda_advisor_can_see(te
 revoke all on public.agenda_requests from anon;
 grant select, insert, update on public.agenda_requests to authenticated;
 
-commit;
 
 -- ============================================================================
 -- Alta de un asesor (DESPUÉS de verificar la asignación de sus clientes):

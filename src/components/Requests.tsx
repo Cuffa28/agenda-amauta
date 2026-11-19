@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { createCalendarEvent } from "@/integrations/google/workspace";
+import { useGoogleWorkspace } from "@/integrations/google/GoogleConnection";
 import { Button } from "@/components/ui/button";
 import { useRepoMutation } from "@/data/use-repo-mutation";
-import { formatDate } from "@/domain/dates";
+import { formatDate, todayInBuenosAires } from "@/domain/dates";
 import {
   isNewRequest,
+  requestEventDate,
   REQUEST_KIND_LABELS,
   REQUEST_STATUS_LABELS,
   type AdvisorRequest,
@@ -111,6 +115,7 @@ export function RequestRow({
             Resuelto
           </Button>
         )}
+        {r.kind === "pedido" && open && <CalendarButton request={r} clientName={clientName} />}
         {r.kind === "pedido" && r.status === "resuelto" && (
           <Button
             variant="ghost"
@@ -143,6 +148,69 @@ export const vigentIndications = (requests: AdvisorRequest[], clientId: string) 
   requests.filter(
     (r) => r.clientId === clientId && r.kind === "indicacion" && r.status === "vigente",
   );
+
+/**
+ * Crea un bloque de 30 minutos a las 10:00 en tu Google Calendar. Agendarlo
+ * dos veces no duplica el evento: se reutiliza el mismo.
+ */
+function CalendarButton({
+  request: r,
+  clientName,
+}: {
+  request: AdvisorRequest;
+  clientName?: string | undefined;
+}) {
+  const google = useGoogleWorkspace();
+  const [busy, setBusy] = useState(false),
+    [url, setUrl] = useState(""),
+    [error, setError] = useState("");
+  if (url)
+    return (
+      <a className="px-2 text-xs underline" href={url} target="_blank" rel="noopener noreferrer">
+        Ver en Calendar
+      </a>
+    );
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        disabled={busy || !google.connected}
+        title={google.connected ? undefined : "Conectá Google en Conexiones para agendar"}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            const date = requestEventDate(r, todayInBuenosAires());
+            const ev = await createCalendarEvent({
+              key: "pedido:" + r.id,
+              title: `Pedido de ${authorLabel(r.authorEmail)} · ${clientName || r.clientId}`,
+              date,
+              time: "10:00",
+              durationMinutes: 30,
+              description: `${r.body}
+
+Agenda Amauta: https://agenda-amauta.vercel.app/clientes/${r.clientId}`,
+            });
+            setUrl(ev.htmlLink);
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "No se pudo agendar.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Agendando…" : "Agendar en Calendar"}
+      </Button>
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+    </>
+  );
+}
 
 /** Ficha: pedidos abiertos del asesor y, plegado, lo cerrado. Las indicaciones vigentes van al Contexto. */
 export function ClientRequests({

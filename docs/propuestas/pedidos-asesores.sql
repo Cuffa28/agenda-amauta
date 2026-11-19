@@ -174,3 +174,11 @@ grant select, insert, update on public.agenda_requests to authenticated;
 -- Altas del 2026-11-19 (rol asesor): florencia (all_clients = true), jeronimo,
 -- agustin, stefano y natalia @amautainversiones.com.
 -- ============================================================================
+
+-- ============================================================================
+-- APLICADA el 2026-11-19 (migración agenda_pedidos_aviso_correo):
+-- pg_net, tabla agenda_request_notifications (un aviso por pedido, solo
+-- service_role) y trigger agenda_requests_notify que llama a la Edge Function
+-- agenda-request-notify (supabase/functions/agenda-request-notify). La función
+-- envía el correo vía Resend con invitación .ics; sin RESEND_API_KEY no envía.
+-- ============================================================================

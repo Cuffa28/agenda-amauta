@@ -190,3 +190,14 @@ describe("Acceso por rol", () => {
     expect(screen.queryByText("Pantalla de pedidos")).toBeNull();
   });
 });
+
+describe("Día del evento en Calendar", () => {
+  it("usa la fecha pedida; sin fecha o vencida, el próximo día hábil", async () => {
+    const { requestEventDate } = await import("@/domain/request");
+    expect(requestEventDate({ desiredDate: "2026-11-20" }, "2026-11-19")).toBe("2026-11-20");
+    expect(requestEventDate({ desiredDate: null }, "2026-11-19")).toBe("2026-11-20");
+    // Viernes → lunes.
+    expect(requestEventDate({ desiredDate: null }, "2026-11-20")).toBe("2026-11-23");
+    expect(requestEventDate({ desiredDate: "2026-11-01" }, "2026-11-19")).toBe("2026-11-20");
+  });
+});

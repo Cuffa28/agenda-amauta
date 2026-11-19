@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealDate } from "./dates";
+import { addDays, isRealDate } from "./dates";
 import { clientIdSchema } from "./schemas";
 
 /**
@@ -88,4 +88,12 @@ export function advisorVisibleClients<C extends { id: string; advisorId: string 
     const email = emailOf.get(c.advisorId) ?? "";
     return !email || email === me || owners.has(email);
   });
+}
+
+/** Día del evento: el que pidió el asesor, o el próximo día hábil. */
+export function requestEventDate(r: Pick<AdvisorRequest, "desiredDate">, today: string): string {
+  if (r.desiredDate && r.desiredDate >= today) return r.desiredDate;
+  let d = addDays(today, 1);
+  while ([0, 6].includes(new Date(d + "T12:00:00Z").getUTCDay())) d = addDays(d, 1);
+  return d;
 }

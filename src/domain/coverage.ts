@@ -74,7 +74,7 @@ export function portfolioMonthStatus(
   let status: PortfolioStatus;
   if (paused) status = "pausada";
   else if (closed) status = openPendings.length > 0 ? "revisada_con_pendiente" : "revisada";
-  else if (stage === "en_revision") status = "en_curso";
+  else if (review && review.status !== "cerrada") status = "en_curso";
   else if (isOverdue) status = "atrasada";
   else if (isDueToday) status = "vence_hoy";
   else status = dueDate ? "programada" : "sin_programar";

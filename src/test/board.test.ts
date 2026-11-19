@@ -7,7 +7,7 @@ const r:Review={id:'r',clientId:client.id,month:'2026-11',status:'cerrada',decis
 const e:BoardEntry={id:'e',clientId:client.id,month:'2026-11',stage:'pausada',updatedAt:'2026-11-02T11:00:00Z',history:[]};
 describe('Avance mensual independiente del criterio',()=>{
  it('recupera el avance de revisiones existentes y respeta una pausa posterior',()=>{
-  expect(boardStage(null)).toBe('pendiente');expect(boardStage({...r,status:'en_curso',closedAt:null})).toBe('en_revision');expect(boardStage(r)).toBe('revisada');expect(boardStage(r,e)).toBe('pausada');
+  expect(boardStage(null)).toBe('pendiente');expect(boardStage({...r,status:'en_curso',closedAt:null})).toBe('pendiente');expect(boardStage(r)).toBe('revisada');expect(boardStage(r,e)).toBe('pausada');
   expect(r.decision).toEqual({type:'mantener',nota:'Conservar la estrategia'});
  });
  it('una nueva revisión guardada después del movimiento pasa a revisada',()=>{

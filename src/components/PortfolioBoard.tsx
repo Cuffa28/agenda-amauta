@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { QuickReview } from "@/components/ficha/QuickReview";
-import { ClientContextCard, ClientNotes } from "@/components/ficha/ClientNotebook";
+import { ClientAnotar, ClientContextCard } from "@/components/ficha/ClientNotebook";
 import { PositionCard } from "@/components/ficha/PositionCard";
 import {
   BoardStageSelect,
@@ -20,16 +20,18 @@ import {
   useStageChange,
 } from "@/components/BoardProgress";
 import { RecommendationBadge, RecommendationTracker } from "@/components/RecommendationTracker";
-import { positionsQuery } from "@/data/queries";
+import { clientContextsQuery, positionsQuery, requestsQuery } from "@/data/queries";
+import { NewBadge } from "@/components/Requests";
+import { isNewRequest } from "@/domain/request";
 import {
-  BOARD_STAGES,
+  VISIBLE_STAGES,
   BOARD_LABELS,
   boardStage,
   type BoardEntry,
   type BoardStage,
 } from "@/domain/board";
 import { DECISION_LABELS } from "@/domain/decision";
-import { formatDateTime } from "@/domain/dates";
+import { formatDateTime, formatMonthLabel } from "@/domain/dates";
 import type { Client, Advisor, Review } from "@/domain/schemas";
 
 export function PortfolioBoard({
@@ -68,6 +70,24 @@ export function PortfolioBoard({
     reviews.filter((r) => r.month === month).map((r) => [r.clientId, r]),
   );
   const advisorsById = new Map(advisors.map((a) => [a.id, a]));
+  // Resumen para leer la tarjeta sin abrir la ficha.
+  const contexts = useQuery(clientContextsQuery());
+  const requests = useQuery(requestsQuery());
+  const liquidityByClient = new Map(
+    (contexts.data ?? []).map((c) => [c.clientId, c.context.liquidity.trim()]),
+  );
+  const openRequests = new Map<string, { count: number; fresh: boolean }>();
+  for (const r of requests.data ?? []) {
+    if (!(r.status === "recibido" || r.status === "en_curso" || isNewRequest(r))) continue;
+    const old = openRequests.get(r.clientId) ?? { count: 0, fresh: false };
+    openRequests.set(r.clientId, { count: old.count + 1, fresh: old.fresh || isNewRequest(r) });
+  }
+  const lastReview = new Map<string, Review>();
+  for (const r of reviews)
+    if (r.month < month && r.status === "cerrada" && r.decision) {
+      const old = lastReview.get(r.clientId);
+      if (!old || old.month < r.month) lastReview.set(r.clientId, r);
+    }
   const selectedClient = clients.find((c) => c.id === selected);
   const moveTo = (id: string, stage: BoardStage) => {
     if (move.isPending) return;
@@ -88,7 +108,7 @@ export function PortfolioBoard({
         </p>
       )}
       <div className="portfolio-board" aria-label="Tablero mensual de carteras">
-        {BOARD_STAGES.map((stage) => {
+        {VISIBLE_STAGES.map((stage) => {
           const cards = clients.filter(
             (c) => boardStage(reviewsByClient.get(c.id), entriesByClient.get(c.id)) === stage,
           );
@@ -159,7 +179,10 @@ export function PortfolioBoard({
                               .elementFromPoint(e.clientX, e.clientY)
                               ?.closest("[data-board-stage]")
                               ?.getAttribute("data-board-stage") as BoardStage | null;
-                            g.target = target && BOARD_STAGES.includes(target) ? target : null;
+                            g.target =
+                              target && (VISIBLE_STAGES as readonly string[]).includes(target)
+                                ? target
+                                : null;
                             setOver(g.target);
                           }}
                           onPointerUp={(e) => {
@@ -193,7 +216,27 @@ export function PortfolioBoard({
                           {DECISION_LABELS[decision.type]}
                         </span>
                       )}
+                      {!decision && lastReview.get(client.id)?.decision && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Última: {DECISION_LABELS[lastReview.get(client.id)!.decision!.type]} ·{" "}
+                          {formatMonthLabel(lastReview.get(client.id)!.month).toLowerCase()}
+                        </p>
+                      )}
                       <RecommendationBadge review={review} />
+                      {liquidityByClient.get(client.id) && (
+                        <p className="mt-1 line-clamp-1 text-xs">
+                          <span className="text-muted-foreground">Liquidez:</span>{" "}
+                          {liquidityByClient.get(client.id)}
+                        </p>
+                      )}
+                      {openRequests.get(client.id) && (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-amber-800">
+                          {openRequests.get(client.id)!.fresh && <NewBadge />}
+                          {openRequests.get(client.id)!.count === 1
+                            ? "1 pedido del asesor"
+                            : `${openRequests.get(client.id)!.count} pedidos del asesor`}
+                        </p>
+                      )}
                       {note && (
                         <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">
                           {note}
@@ -282,7 +325,7 @@ export function PortfolioBoard({
                 />
                 <RecommendationTracker review={reviewsByClient.get(selectedClient.id)} />
                 <ClientContextCard client={selectedClient} />
-                <ClientNotes clientId={selectedClient.id} />
+                <ClientAnotar clientId={selectedClient.id} />
                 <details>
                   <summary className="cursor-pointer text-sm">Ver cartera y PDF</summary>
                   <BoardPosition clientId={selectedClient.id} />

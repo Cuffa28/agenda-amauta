@@ -142,6 +142,7 @@ export function createMemoryRepository(
       const next:RecommendationRecord={id:'rec-'+review.id,reviewId:review.id,clientId:review.clientId,state:p.state,on,note:p.note,updatedAt:at,history:[...(old?.history||[]),{state:p.state,on,note:p.note,at}]};
       recommendations.set(review.id,next);return clone(next);
     },
+    async listClientContexts() {return clone([...notebooks.entries()].filter(([,n])=>n.updatedAt).map(([clientId,n])=>({clientId,context:n.context,updatedAt:n.updatedAt!})));},
     async getClientNotebook(id) {if(!state.clients.some(c=>c.id===id))throw new RepositoryNotFoundError('Cliente',id);return clone(notebooks.get(id)||{context:{...emptyContext},notes:[]});},
     async saveClientContext(id,context,expected) {const old=await this.getClientNotebook(id);if(old.updatedAt!==expected)throw new RepositoryRuleError('El contexto cambió en otra sesión.');const next={...old,context:parseOrThrow(clientContextSchema,context),updatedAt:nowIso()};notebooks.set(id,next);return clone(next);},
     async addClientNote(id,input) {const old=await this.getClientNotebook(id);const note={...parseOrThrow(clientNoteSchema,input),id:newId('note'),at:nowIso()};notebooks.set(id,{...old,notes:[note,...old.notes]});return clone(note);},

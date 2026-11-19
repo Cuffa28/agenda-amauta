@@ -6,7 +6,8 @@ import { SectionCard } from "@/components/PageHeader";
 import { RequestRow } from "@/components/Requests";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateTime } from "@/domain/dates";
+import { formatDate, formatDateTime, todayInBuenosAires } from "@/domain/dates";
+import { isContextStale } from "@/domain/timeline";
 import type { ClientContext, ClientNotebook as Notebook } from "@/domain/client-notebook";
 import type { AdvisorRequest } from "@/domain/request";
 import type { Client } from "@/domain/schemas";
@@ -82,7 +83,7 @@ function ContextEditor({
     (repo, _: void) => repo.saveClientContext(client.id, context, notebook.updatedAt),
     {
       success: "Contexto guardado",
-      invalidate: [],
+      invalidate: ["client-contexts"],
       onSuccess: (result) => {
         cache.setQueryData(["client-notebook", client.id], result);
         setEditing(false);
@@ -94,7 +95,7 @@ function ContextEditor({
   return (
     <SectionCard
       title="Contexto del cliente"
-      description="Lo que sigue valiendo. Si algo cambia, actualizalo acá; lo puntual va en Notas."
+      description="Lo que sigue valiendo. Para sumar algo, usá Anotar; lo puntual queda en el Historial."
       actions={
         <Button
           size="sm"
@@ -160,11 +161,17 @@ function ContextEditor({
               Sin cargar: {empty.map((k) => LABELS[k].toLowerCase()).join(", ")}.
             </p>
           )}
-          {notebook.updatedAt && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Actualizado {formatDateTime(notebook.updatedAt)}
-            </p>
-          )}
+          {notebook.updatedAt &&
+            (isContextStale(notebook.updatedAt, todayInBuenosAires()) ? (
+              <p role="status" className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-900">
+                El contexto no se actualiza desde el {formatDate(notebook.updatedAt.slice(0, 10))}.
+                Más de 6 meses: conviene revisarlo con el asesor.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Actualizado {formatDateTime(notebook.updatedAt)}
+              </p>
+            ))}
         </>
       )}
       {save.error && (
@@ -188,13 +195,17 @@ function ContextEditor({
   );
 }
 
-/** Lo que pasó y cuándo. Solo tuyas; lo del asesor llega por sus pedidos. */
-export function ClientNotes({ clientId }: { clientId: string }) {
+/**
+ * Un solo lugar para anotar. Por defecto queda como nota con fecha; si sigue
+ * valiendo, se suma al campo del Contexto que corresponda.
+ */
+export function ClientAnotar({ clientId }: { clientId: string }) {
   const query = useNotebook(clientId);
   const cache = useQueryClient();
   const [body, setBody] = useState("");
+  const [field, setField] = useState<keyof ClientContext>("liquidity");
   const note = useRepoMutation(
-    (repo, _: void) => repo.addClientNote(clientId, { body, source: "propia" }),
+    (repo, _: void) => repo.addClientNote(clientId, { body: body.trim(), source: "propia" }),
     {
       success: "Nota guardada",
       invalidate: [],
@@ -206,63 +217,75 @@ export function ClientNotes({ clientId }: { clientId: string }) {
       },
     },
   );
-  const notes = query.data?.notes ?? [];
-  const shown = notes.slice(0, 5),
-    older = notes.slice(5);
-  const item = (n: (typeof notes)[number]) => (
-    <li key={n.id} className="border-l-2 pl-3">
-      <p className="text-xs text-muted-foreground">
-        {formatDateTime(n.at)}
-        {n.source === "asesor" ? " · me dijo el asesor" : ""}
-      </p>
-      <p className="mt-1 whitespace-pre-wrap text-sm">{n.body}</p>
-    </li>
+  const toContext = useRepoMutation(
+    (repo, _: void) => {
+      const nb = query.data!;
+      const current = nb.context[field].trim();
+      const next = {
+        ...nb.context,
+        [field]: current
+          ? `${current}
+${body.trim()}`
+          : body.trim(),
+      };
+      return repo.saveClientContext(clientId, next, nb.updatedAt);
+    },
+    {
+      success: "Sumado al Contexto",
+      invalidate: ["client-contexts"],
+      onSuccess: (result) => {
+        cache.setQueryData(["client-notebook", clientId], result);
+        setBody("");
+      },
+    },
   );
+  const busy = note.isPending || toContext.isPending;
+  const error = note.error || toContext.error;
   return (
-    <SectionCard title={`Notas${notes.length ? ` · ${notes.length}` : ""}`}>
-      <form
-        className="space-y-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (body.trim() && !note.isPending) note.mutate();
-        }}
-      >
-        <Textarea
-          aria-label="Nueva nota"
-          rows={2}
-          maxLength={4000}
-          value={body}
-          disabled={note.isPending}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Lo que pasó o te contaron. Queda con fecha."
-        />
-        <Button variant="outline" size="sm" disabled={!body.trim() || note.isPending}>
-          {note.isPending ? "Guardando…" : "Agregar nota"}
+    <SectionCard title="Anotar">
+      <Textarea
+        aria-label="Anotar"
+        rows={2}
+        maxLength={1000}
+        value={body}
+        disabled={busy}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Lo que pasó, te contaron o tenés que recordar de este cliente."
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" disabled={!body.trim() || busy} onClick={() => note.mutate()}>
+          {note.isPending ? "Guardando…" : "Guardar como nota"}
         </Button>
-        {note.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {note.error.message}
-          </p>
-        )}
-      </form>
-      {query.isPending ? (
-        <p className="mt-3 text-sm text-muted-foreground">Cargando notas…</p>
-      ) : notes.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">Todavía no hay notas.</p>
-      ) : (
-        <ul className="mt-4 space-y-3">
-          {shown.map(item)}
-          {older.length > 0 && (
-            <li>
-              <details>
-                <summary className="cursor-pointer text-sm text-muted-foreground">
-                  Notas anteriores · {older.length}
-                </summary>
-                <ul className="mt-3 space-y-3">{older.map(item)}</ul>
-              </details>
-            </li>
-          )}
-        </ul>
+        <span className="text-xs text-muted-foreground">o, si sigue valiendo, sumalo a</span>
+        <select
+          aria-label="Campo del Contexto"
+          className="rounded-lg border bg-background px-2 py-1 text-sm"
+          value={field}
+          disabled={busy}
+          onChange={(e) => setField(e.target.value as keyof ClientContext)}
+        >
+          {KEYS.map((k) => (
+            <option key={k} value={k}>
+              {LABELS[k]}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!body.trim() || busy || !query.data}
+          onClick={() => toContext.mutate()}
+        >
+          {toContext.isPending ? "Sumando…" : "Sumar al Contexto"}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Las notas quedan con fecha en el Historial. El Contexto es lo que sigue valiendo.
+      </p>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {error.message}
+        </p>
       )}
     </SectionCard>
   );

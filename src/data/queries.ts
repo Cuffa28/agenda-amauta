@@ -47,6 +47,11 @@ export const requestClientsQuery = () =>
     queryKey: ["request-clients"],
     queryFn: () => getRepository().listRequestClients(),
   });
+export const clientContextsQuery = () =>
+  queryOptions({
+    queryKey: ["client-contexts"],
+    queryFn: () => getRepository().listClientContexts(),
+  });
 export const pausesQuery = () =>
   queryOptions({ queryKey: ["pauses"], queryFn: () => getRepository().listPauses() });
 /** Avance del mes con las pausas vigentes ya aplicadas (sobreviven al cambio de mes). */

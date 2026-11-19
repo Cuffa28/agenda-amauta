@@ -73,8 +73,8 @@ describe("Pausas con fecha de regreso", () => {
   });
 
   it("un movimiento manual posterior y una revisión cerrada después de pausar mandan", () => {
-    const moved = entry({ stage: "en_revision", updatedAt: "2026-11-25T00:00:00Z" });
-    expect(stageIn("2026-11", "2026-11-26", [pause()], [moved]).stage).toBe("en_revision");
+    const moved = entry({ stage: "pendiente", updatedAt: "2026-11-25T00:00:00Z" });
+    expect(stageIn("2026-11", "2026-11-26", [pause()], [moved]).stage).toBe("pendiente");
     const review = {
       id: "r",
       clientId,

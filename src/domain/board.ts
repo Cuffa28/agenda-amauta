@@ -8,6 +8,15 @@ export const BOARD_LABELS: Record<BoardStage, string> = {
   pausada: "Pausada",
 };
 export type BoardStage = (typeof BOARD_STAGES)[number];
+/**
+ * Columnas visibles. "En revisión" ya no se usa (nunca se movió una tarjeta ahí):
+ * sigue siendo un valor válido guardado, pero se muestra como Pendiente.
+ */
+export const VISIBLE_STAGES = [
+  "pendiente",
+  "revisada",
+  "pausada",
+] as const satisfies readonly BoardStage[];
 export const boardInputSchema = z.object({
   clientId: clientIdSchema,
   month: monthSchema,
@@ -38,6 +47,7 @@ export function entryVersion(entry?: BoardEntry): string | undefined {
 export function boardStage(review: Review | null | undefined, entry?: BoardEntry): BoardStage {
   // Una pausa ya vencida no retiene la tarjeta: vuelve a su estado natural.
   if (entry?.resumedOn && entry.stage === "pausada") entry = undefined;
-  if (entry && (!review?.closedAt || entry.updatedAt >= review.closedAt)) return entry.stage;
-  return review?.status === "cerrada" ? "revisada" : review ? "en_revision" : "pendiente";
+  if (entry && (!review?.closedAt || entry.updatedAt >= review.closedAt))
+    return entry.stage === "en_revision" ? "pendiente" : entry.stage;
+  return review?.status === "cerrada" ? "revisada" : "pendiente";
 }

@@ -1,6 +1,6 @@
 import { PortfolioBoard } from "@/components/PortfolioBoard";
 import { Button } from "@/components/ui/button";
-import { boardStage, BOARD_LABELS } from "@/domain/board";
+import { boardStage, BOARD_LABELS, VISIBLE_STAGES } from "@/domain/board";
 import {
   BoardStageSelect,
   StageNote,
@@ -173,9 +173,9 @@ function ClientesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>Todos los estados</SelectItem>
-            {Object.entries(BOARD_LABELS).map(([key, label]) => (
+            {VISIBLE_STAGES.map((key) => (
               <SelectItem key={key} value={"stage:" + key}>
-                {label}
+                {BOARD_LABELS[key]}
               </SelectItem>
             ))}
             <SelectItem value="mantener">Mantener</SelectItem>

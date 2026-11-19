@@ -9,7 +9,8 @@ import { ClientTasks } from "@/components/Tasks";
 import { ClientRequests, vigentIndications } from "@/components/Requests";
 import { boardStage } from "@/domain/board";
 import { QuickReview } from "@/components/ficha/QuickReview";
-import { ClientContextCard, ClientNotes } from "@/components/ficha/ClientNotebook";
+import { ClientAnotar, ClientContextCard } from "@/components/ficha/ClientNotebook";
+import { ClientTimeline } from "@/components/ficha/ClientTimeline";
 import { PersonalReviewSchedule } from "@/components/ficha/PersonalReviewSchedule";
 import { useState } from "react";
 import { useQuery, useSuspenseQueries } from "@tanstack/react-query";
@@ -116,7 +117,7 @@ function ClientPage() {
       >
         <a href="#contexto">Contexto</a>
         <a href="#revision">Mi revisión</a>
-        <a href="#notas">Notas</a>
+        <a href="#historial">Historial</a>
         <a href="#tareas">Tareas</a>
         <a href="#posicion">Cartera y PDF</a>
         <a href="#mi-agenda">Agendar</a>
@@ -157,6 +158,7 @@ function ClientPage() {
       <section id="contexto" className="scroll-mt-4">
         <ClientContextCard client={client} indications={vigentIndications(requests, clientId)} />
       </section>
+      <ClientAnotar clientId={clientId} />
       <ClientRequests clientId={clientId} requests={requests} />
       <section id="revision" className="scroll-mt-4">
         <QuickReview
@@ -182,9 +184,6 @@ function ClientPage() {
           </div>
         </details>
       </section>
-      <section id="notas" className="scroll-mt-4">
-        <ClientNotes clientId={clientId} />
-      </section>
       <section id="tareas" className="scroll-mt-4">
         <ClientTasks clientId={clientId} tasks={tasks} />
       </section>
@@ -205,29 +204,9 @@ function ClientPage() {
       <section id="mi-agenda" className="scroll-mt-4">
         <PersonalReviewSchedule key={clientId} client={client} />
       </section>
-      <details className="surface-card p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          Revisiones anteriores ·{" "}
-          {reviews.filter((r) => r.status === "cerrada" && r.decision && r.month !== month).length}
-        </summary>
-        <ol className="mt-3 grid gap-4">
-          {reviews
-            .filter((r) => r.status === "cerrada" && r.decision && r.month !== month)
-            .sort((a, b) => b.month.localeCompare(a.month))
-            .map((r) => (
-              <li key={r.id} className="border-l-2 pl-3 text-sm">
-                <p className="text-xs text-muted-foreground">
-                  {formatMonthLabel(r.month)}
-                  {r.closedAt ? ` · cerrada el ${formatDate(r.closedAt.slice(0, 10))}` : ""}
-                </p>
-                <p className="font-medium">{r.decision ? describeDecision(r.decision) : ""}</p>
-                {r.analysis && (
-                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{r.analysis}</p>
-                )}
-              </li>
-            ))}
-        </ol>
-      </details>
+      <section id="historial" className="scroll-mt-4">
+        <ClientTimeline clientId={clientId} reviews={reviews} requests={requests} tasks={tasks} />
+      </section>
       <section id="posicion" className="grid scroll-mt-4 gap-4">
         <PositionCard position={position} />
         <PositionEditor key={clientId} clientId={clientId} />

@@ -153,6 +153,9 @@ export function createSupabaseRepository(client: () => SupabaseClient = getSupab
       const payload = { client_id: review.clientId, subject: 'Seguimiento de recomendación', body: p.note, source_snapshot: { kind: 'recommendation_followup', reviewId: review.id, state: p.state, on, note: p.note, history } };
       return mapRecommendation(old ? await update('agenda_drafts', id, payload, old['updated_at']) : await insert('agenda_drafts', { ...payload, id }));
     },
+    async listClientContexts() {
+      return (await rows('agenda_drafts', undefined, 'client_context')).map(r => ({ clientId: r['client_id'], context: parseOrThrow(clientContextSchema, r['source_snapshot'].context), updatedAt: r['updated_at'] }));
+    },
     async getClientNotebook(clientId) {
       const all = await rows('agenda_drafts', clientId);
       const context = all.find(r=>r['source_snapshot']?.kind==='client_context');

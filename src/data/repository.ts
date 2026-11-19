@@ -40,6 +40,8 @@ export type RepositoryMode = "demo-memoria" | "supabase";
 export interface AgendaRepository {
   readonly mode: RepositoryMode;
   getClientNotebook(clientId:string):Promise<ClientNotebook>;
+  /** Contexto de todos los clientes que lo tienen cargado, en una sola lectura (para el tablero). */
+  listClientContexts():Promise<{clientId:string;context:ClientContext;updatedAt:string}[]>;
   saveClientContext(clientId:string, context:ClientContext, expectedUpdatedAt?:string):Promise<ClientNotebook>;
   addClientNote(clientId:string, note:Pick<ClientNote,'body'|'source'>):Promise<ClientNote>;
   listBoardEntries(month:string):Promise<BoardEntry[]>;

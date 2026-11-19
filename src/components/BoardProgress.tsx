@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  BOARD_STAGES,
+  VISIBLE_STAGES,
   BOARD_LABELS,
   entryVersion,
   type BoardEntry,
@@ -191,8 +191,10 @@ export function stageNote(
       : { text: "Sin fecha de regreso", warn: true };
   if (stage !== "pausada" && entry?.resumedOn)
     return { text: `Retomada el ${formatDate(entry.resumedOn)}` };
-  if (missed && (stage === "pendiente" || stage === "en_revision"))
+  if (missed && stage === "pendiente")
     return { text: `Sin revisar en ${monthName(missed)}`, warn: true };
+  if (stage === "pendiente" && review && review.status !== "cerrada")
+    return { text: "Lectura guardada, sin decidir" };
   if (stage === "revisada" && !(review?.status === "cerrada" && review.decision))
     return { text: "Sin conclusión" };
   return null;
@@ -255,7 +257,7 @@ export function BoardStageSelect({
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as BoardStage)}
     >
-      {BOARD_STAGES.map((s) => (
+      {VISIBLE_STAGES.map((s) => (
         <option key={s} value={s}>
           {BOARD_LABELS[s]}
         </option>
